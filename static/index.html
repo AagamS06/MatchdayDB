@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="MatchdayDB: local football scouting, tactical search, and player similarity.">
+  <title>MatchdayDB · Scout your next move</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c4f36b'/%3E%3Cpath d='M7 23V9l9 9 9-9v14' fill='none' stroke='%23101b12' stroke-width='4'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#scouting">Skip to scouting</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="MatchdayDB home"><span class="brand-mark" aria-hidden="true">M</span><span>Matchday<span class="brand-light">DB</span></span></a>
+    <nav aria-label="Main navigation"><a class="nav-active" href="#scouting">Scout engine</a><a href="#matchday">Matchday</a><a href="#system-status">Data status</a></nav>
+    <span class="local-tag"><span class="dot"></span> LOCAL INTELLIGENCE</span>
+  </header>
+
+  <main class="shell">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="dash"></span> THE SCOUT'S WORKSPACE</div>
+        <h1 id="hero-title">Read the game.<br><span>Find your next player.</span></h1>
+        <p>Turn a tactical idea into a shortlist. Discover playing styles,<br class="desktop-break"> explore the numbers, and find the closest player twins.</p>
+        <div class="hero-meta"><span id="source-badge" class="badge badge-neutral">Connecting to local data</span><span id="season-label">Season catalogue</span></div>
+      </div>
+      <div class="pitch-art" aria-hidden="true">
+        <div class="pitch"><div class="pitch-circle"></div><div class="pitch-box top"></div><div class="pitch-box bottom"></div>
+          <i class="player-dot pd1"></i><i class="player-dot pd2"></i><i class="player-dot pd3"></i><i class="player-dot pd4"></i><i class="player-dot pd5 selected"></i><i class="player-dot pd6"></i><i class="player-dot pd7"></i><i class="player-dot pd8"></i><i class="player-dot pd9"></i><i class="player-dot pd10"></i><i class="player-dot pd11"></i>
+        </div><span class="pitch-label">A DIFFERENT WAY TO SEE THE GAME</span>
+      </div>
+    </section>
+
+    <section class="overview" aria-label="Database overview">
+      <div><span class="stat-label">PLAYERS IN SCOPE</span><strong id="player-count">—</strong><span class="stat-detail">Across every position</span></div>
+      <div><span class="stat-label">CLUBS REPRESENTED</span><strong id="team-count">—</strong><span class="stat-detail">A global scouting view</span></div>
+      <div><span class="stat-label">PROFILES INDEXED</span><strong id="index-count">—</strong><span class="stat-detail">384-dimensional profiles</span></div>
+      <div class="overview-status"><span class="stat-label">SCOUTING ENGINE</span><strong class="engine-state" id="engine-state">Starting</strong><span class="stat-detail" id="engine-detail">Checking local services</span></div>
+    </section>
+
+    <div class="workspace" id="scouting">
+      <section class="scout-main" aria-labelledby="scout-heading">
+        <div class="section-heading"><div><div class="eyebrow muted">01 / DISCOVER</div><h2 id="scout-heading">Build your shortlist</h2></div><span class="small-label">Tactics first. Evidence always.</span></div>
+        <form id="search-form" class="search-panel">
+          <label class="sr-only" for="query">Describe the player you are looking for</label>
+          <div class="search-row"><span class="search-icon" aria-hidden="true">⌕</span><input id="query" type="search" maxlength="1000" autocomplete="off" placeholder="Describe your ideal player or playing style"><button class="button primary" type="submit" id="search-button">Find players <span aria-hidden="true">↗</span></button></div>
+          <div class="quick-filters" aria-label="Try a tactical search"><span>Try a role</span><button type="button" class="chip" data-query="Box-to-box midfielder with progressive carries and energetic pressing">Box-to-box midfielder</button><button type="button" class="chip" data-query="Left-footed inverted right winger who cuts inside and creates chances">Inverted winger</button><button type="button" class="chip" data-query="Press-resistant defensive midfielder who breaks transition lines with progressive passes">Deep-lying playmaker</button></div>
+          <div class="filter-row">
+            <label>Position<select id="position"><option value="">All positions</option></select></label>
+            <label>Maximum age<input id="max-age" type="number" min="14" max="60" inputmode="numeric" placeholder="Any age"></label>
+            <label>Nationality<select id="nationality"><option value="">All nations</option></select></label>
+            <label>League<select id="league"><option value="">All leagues</option></select></label>
+            <button id="clear-filters" class="text-button" type="button">Reset</button>
+          </div>
+        </form>
+        <div class="results-heading"><div><h3 id="results-title">Player collection</h3><p id="results-meta">Loading player profiles</p></div><span class="mini-badge">PER 90 METRICS</span></div>
+        <p class="feedback hidden" id="search-feedback" role="status" aria-live="polite"></p>
+        <div class="player-grid" id="results" aria-live="polite" aria-busy="true"></div>
+        <div class="pagination" id="pagination"><button type="button" class="button secondary" id="previous-page" disabled>Previous</button><span id="page-label"></span><button type="button" class="button secondary" id="next-page" disabled>Next</button></div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="twin-panel" aria-labelledby="twin-heading">
+          <div class="twin-icon" aria-hidden="true">⇄</div><div class="eyebrow muted">02 / COMPARE</div><h2 id="twin-heading">Find a player twin</h2><p>Start with a player you know.<br>Meet five with a similar style.</p>
+          <label for="twin-player">Your reference player</label><select id="twin-player"><option value="">Choose a player</option></select>
+          <div class="twin-controls"><label class="check-label"><input id="cross-role" type="checkbox"> Compare across roles</label><label class="check-label"><input id="hybrid-ranking" type="checkbox"> Include statistical similarity</label></div>
+          <p id="twin-feedback" class="twin-feedback" role="status" aria-live="polite">Select a player to explore their closest stylistic matches.</p><div id="twins" aria-live="polite"></div>
+          <p class="score-explainer" id="score-explainer">Bars show cosine similarity × 100, with negative values shown as 0%. Similarity is not a player quality rating.</p>
+        </section>
+        <section class="status-panel" id="system-status" aria-labelledby="status-heading"><div class="status-header"><h3 id="status-heading">Your data, in focus</h3><span class="dot" aria-hidden="true"></span></div><p id="provenance-text">Checking data provenance.</p><div class="status-line"><span>Last sync</span><strong id="last-sync">Not yet synchronized</strong></div><div class="status-line"><span>Source</span><strong id="source-text">Connecting</strong></div><button id="sync-button" class="button secondary full-width" type="button">↻ Sync data</button><p id="sync-feedback" class="sync-feedback" role="status" aria-live="polite"></p></section>
+      </aside>
+    </div>
+
+    <section class="matchday-section" id="matchday" aria-labelledby="matchday-heading"><div class="section-heading"><div><div class="eyebrow muted">03 / THE MATCHDAY PICTURE</div><h2 id="matchday-heading">From the fixture feed</h2></div><span id="fixture-source" class="small-label">Provider snapshots</span></div><div id="fixtures" class="fixture-grid"><p class="subtle">Fixtures will appear after synchronization.</p></div></section>
+    <footer><a class="brand footer-brand" href="#"><span class="brand-mark small" aria-hidden="true">M</span>MatchdayDB</a><span>Football intelligence. On your machine.</span><a href="/openapi.json">API reference ↗</a></footer>
+  </main>
+
+  <dialog id="player-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><span class="eyebrow muted">PLAYER DOSSIER</span><button id="close-dialog" class="icon-button" type="button" aria-label="Close player details">×</button></div><div id="dialog-content"></div><button id="dialog-compare" class="button primary full-width" type="button">Find this player's twins ↗</button></dialog>
+  <noscript><p class="noscript">Enable JavaScript to use the dashboard. The JSON API is available at /players and /openapi.json.</p></noscript>
+</body>
+</html>
