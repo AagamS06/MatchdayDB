@@ -8,7 +8,8 @@ import sqlite3
 import threading
 import uuid
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import date, datetime, timedelta, UTC
+from dataclasses import dataclass, replace
 from typing import Annotated, Any
 from collections.abc import AsyncIterator
 from urllib.parse import urlsplit
@@ -22,13 +23,14 @@ from filelock import FileLock, Timeout
 from starlette.exceptions import HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from config import ROOT, Settings
+from config import ROOT, LEAGUES, Settings
 from database import Database
 from embeddings import LocalEmbedder, index_players, valid_index
 from errors import MatchdayError
-from ingestion import ingest
-from models import Filters, Ranking, SyncRequest, utc_now
+from ingestion import FootballClient, ingest
+from models import ConnectRequest, Filters, Ranking, SortField, SortOrder, SyncRequest, utc_now
 from scout import Scout, public_player
+from team_scout import audit_team
 
 LOGGER = logging.getLogger("matchdaydb")
 
@@ -142,54 +144,78 @@ class SyncManager:
                 )
 
 
+@dataclass
+class Services:
+    settings: Settings
+    database: Database
+    engine: LocalEmbedder
+    scout: Scout
+    manager: SyncManager
+
+
 def create_app(
     settings: Settings | None = None, *, bootstrap: bool = True, embedder: LocalEmbedder | None = None
 ) -> FastAPI:
     settings = settings or Settings.from_env()
-    database = Database(settings.db_path, settings.source, settings.season)
     engine = embedder or LocalEmbedder(settings)
-    scout = Scout(database, engine)
-    manager = SyncManager(settings, database, engine)
+
+    def build_services(config: Settings) -> Services:
+        database = Database(config.db_path, config.source, config.effective_season, config.provider)
+        return Services(
+            config, database, engine, Scout(database, engine), SyncManager(config, database, engine)
+        )
+
+    current = build_services(settings)
+    switch_lock = threading.Lock()
+
+    def services() -> Services:
+        return current
 
     async def poll() -> None:
-        while not manager.stop.is_set():
-            await asyncio.sleep(settings.poll_seconds)
-            try:
-                await asyncio.to_thread(manager.start, SyncRequest())
-            except MatchdayError as exc:
-                if exc.code != "SYNC_IN_PROGRESS":
-                    LOGGER.warning("Scheduled sync unavailable (%s)", exc.code)
+        while True:
+            interval = current.settings.poll_seconds
+            await asyncio.sleep(interval if interval else 30)
+            with switch_lock:
+                ctx = current
+                if not interval or ctx.settings.offline:
+                    continue
+                try:
+                    ctx.manager.start(SyncRequest())
+                except MatchdayError as exc:
+                    if exc.code != "SYNC_IN_PROGRESS":
+                        LOGGER.warning("Scheduled sync unavailable (%s)", exc.code)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
-        database.initialize()
+        current.database.initialize()
         if bootstrap:
             try:
-                manager.start(SyncRequest(index_only=settings.offline and settings.source == "api"))
+                current.manager.start(
+                    SyncRequest(index_only=current.settings.offline and current.settings.source == "api")
+                )
             except MatchdayError as exc:
                 LOGGER.warning("Startup sync unavailable (%s)", exc.code)
-        task = asyncio.create_task(poll()) if settings.poll_seconds and not settings.offline else None
+        task = asyncio.create_task(poll())
         try:
             yield
         finally:
-            if task:
-                task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    LOGGER.debug("Polling task stopped")
-            await asyncio.to_thread(manager.close)
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                LOGGER.debug("Polling task stopped")
+            await asyncio.to_thread(current.manager.close)
 
     application = FastAPI(
         title="MatchdayDB",
-        version="0.1.0",
+        version="0.2.0",
         lifespan=lifespan,
         description="Local football data ingestion and semantic scouting.",
         docs_url=None,
         redoc_url=None,
     )
-    application.state.database, application.state.engine = database, engine
-    application.state.manager = manager
+    application.state.database, application.state.engine = current.database, engine
+    application.state.manager = current.manager
     application.add_middleware(
         TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"]
     )
@@ -297,13 +323,19 @@ def create_app(
         position: str | None = None,
         nationality: str | None = None,
         team_id: Annotated[int | None, Query(gt=0)] = None,
+        team: Annotated[str | None, Query(max_length=200)] = None,
         league: str | None = None,
         as_of: date | None = None,
     ) -> Filters:
         from pydantic import ValidationError
 
         fields = dict(
-            max_age=max_age, position=position, nationality=nationality, team_id=team_id, league=league
+            max_age=max_age,
+            position=position,
+            nationality=nationality,
+            team_id=team_id,
+            team=team,
+            league=league,
         )
         if as_of is not None:
             fields["as_of"] = as_of
@@ -322,58 +354,104 @@ def create_app(
     def search(
         q: Annotated[str, Query(min_length=3, max_length=1000)],
         filters: Annotated[Filters, Depends(filter_params)],
+        ctx: Annotated[Services, Depends(services)],
         top_k: Annotated[int, Query(ge=1, le=50)] = 12,
     ) -> dict[str, Any]:
-        return scout.search(q, filters, top_k)
+        return ctx.scout.search(q, filters, top_k)
 
     @application.get("/similar/{player_name}")
     def similar(
         player_name: str,
         filters: Annotated[Filters, Depends(filter_params)],
+        ctx: Annotated[Services, Depends(services)],
         top_k: Annotated[int, Query(ge=1, le=50)] = 5,
         player_id: Annotated[int | None, Query(gt=0)] = None,
         ranking: Ranking = "semantic",
         cross_role: bool = False,
     ) -> dict[str, Any]:
-        return scout.similar(player_name, filters, top_k, player_id, ranking, cross_role)
+        return ctx.scout.similar(player_name, filters, top_k, player_id, ranking, cross_role)
 
     @application.get("/players")
     def players(
         filters: Annotated[Filters, Depends(filter_params)],
+        ctx: Annotated[Services, Depends(services)],
+        q: Annotated[str | None, Query(max_length=200)] = None,
+        sort_by: SortField = "name",
+        order: SortOrder = "asc",
         limit: Annotated[int, Query(ge=1, le=100)] = 12,
         offset: Annotated[int, Query(ge=0)] = 0,
     ) -> dict[str, Any]:
-        rows = sorted(database.candidates(filters), key=lambda row: (row["name_key"], row["player_id"]))
+        rows = ctx.database.candidates(filters.model_copy(update={"q": q}))
+        items = [
+            public_player(row, filters.as_of, valid_index(row, ctx.engine, ctx.database.season))
+            for row in rows
+        ]
+        items.sort(key=lambda r: (r["name"].casefold(), r["player_id"]))
+
+        def sort_value(item: dict[str, Any]) -> Any:
+            if sort_by in {"goals", "assists"}:
+                return item["totals"][sort_by]
+            value = item.get("team_name" if sort_by == "team" else sort_by)
+            return value.casefold() if isinstance(value, str) else value
+
+        known = [item for item in items if sort_value(item) is not None]
+        missing = [item for item in items if sort_value(item) is None]
+        known.sort(key=sort_value, reverse=order == "desc")
+        ordered = known + missing
         return {
-            "total": len(rows),
+            "total": len(items),
             "offset": offset,
             "limit": limit,
-            "items": [
-                public_player(row, filters.as_of, valid_index(row, engine, settings.season))
-                for row in rows[offset : offset + limit]
-            ],
+            "sort_by": sort_by,
+            "order": order,
+            "items": ordered[offset : offset + limit],
         }
 
     @application.get("/options")
-    def options() -> dict[str, Any]:
-        rows = sorted(database.candidates(), key=lambda row: (row["name_key"], row["player_id"]))
+    def options(ctx: Annotated[Services, Depends(services)]) -> dict[str, Any]:
+        rows = sorted(ctx.database.candidates(), key=lambda row: (row["name_key"], row["player_id"]))
+        with ctx.database.read() as connection:
+            teams = [
+                dict(r)
+                for r in connection.execute(
+                    "SELECT t.team_id,t.name,t.league,count(p.player_id) AS players FROM teams t LEFT JOIN players p ON p.team_id=t.team_id AND p.is_active=1 WHERE t.league IS NOT NULL GROUP BY t.team_id ORDER BY t.name"
+                )
+            ]
         return {
             "players": [
-                {key: row[key] for key in ("player_id", "name", "position", "team_name")} for row in rows
+                {key: row[key] for key in ("player_id", "name", "position", "team_id", "team_name")}
+                for row in rows
             ],
+            "teams": teams,
             "positions": sorted({r["position"] for r in rows}),
             "nationalities": sorted({r["nationality"] for r in rows if r["nationality"]}),
-            "leagues": sorted({r["league"] for r in rows if r["league"]}),
+            "leagues": [{"code": code, "name": name} for code, name in LEAGUES.items()],
         }
 
+    @application.get("/teams/{team_id}/needs")
+    def team_needs(
+        team_id: int,
+        ctx: Annotated[Services, Depends(services)],
+        max_age: Annotated[int | None, Query(ge=14, le=60)] = None,
+        max_value: Annotated[int | None, Query(ge=0)] = None,
+        top_k: Annotated[int, Query(ge=1, le=10)] = 5,
+    ) -> dict[str, Any]:
+        return audit_team(
+            ctx.database,
+            team_id,
+            as_of=datetime.now(UTC).date(),
+            max_age=max_age,
+            max_value=max_value,
+            top_k=top_k,
+        )
+
     @application.get("/fixtures")
-    def fixtures() -> dict[str, Any]:
-        with database.read() as connection:
-            rows = connection.execute("""SELECT f.match_id,f.kickoff,f.status,f.home_score,f.away_score,
-                h.short_name AS home,h.name AS home_name,a.short_name AS away,a.name AS away_name,
-                f.observed_at FROM fixtures f JOIN teams h ON h.team_id=f.home_team_id
-                JOIN teams a ON a.team_id=f.away_team_id ORDER BY f.kickoff DESC LIMIT 6""").fetchall()
-        return {"synthetic": settings.source == "demo", "items": [dict(row) for row in rows]}
+    def fixtures(ctx: Annotated[Services, Depends(services)]) -> dict[str, Any]:
+        with ctx.database.read() as connection:
+            rows = connection.execute(
+                "SELECT f.match_id,f.kickoff,f.status,f.home_score,f.away_score,h.short_name AS home,h.name AS home_name,a.short_name AS away,a.name AS away_name,f.observed_at FROM fixtures f JOIN teams h ON h.team_id=f.home_team_id JOIN teams a ON a.team_id=f.away_team_id ORDER BY ABS(julianday(f.kickoff)-julianday('now')),f.match_id LIMIT 6"
+            ).fetchall()
+        return {"synthetic": ctx.settings.source == "demo", "items": [dict(row) for row in rows]}
 
     def job_record(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)
@@ -381,41 +459,130 @@ def create_app(
         return result
 
     @application.get("/health")
-    def health() -> dict[str, Any]:
+    def health(ctx: Annotated[Services, Depends(services)]) -> dict[str, Any]:
+        database, config = ctx.database, ctx.settings
         rows = database.candidates()
         with database.read() as connection:
             latest = connection.execute(
                 "SELECT * FROM sync_runs ORDER BY started_at DESC,rowid DESC LIMIT 1"
             ).fetchone()
-            teams = connection.execute("SELECT count(*) FROM teams").fetchone()[0]
-            matches = connection.execute("SELECT count(*) FROM fixtures").fetchone()[0]
-        indexed = sum(valid_index(row, engine, settings.season) for row in rows)
+            fixtures_count = connection.execute("SELECT count(*) FROM fixtures").fetchone()[0]
+            league_state = {r["code"]: dict(r) for r in connection.execute("SELECT * FROM league_status")}
+            squads = {r["team_id"]: dict(r) for r in connection.execute("SELECT * FROM squad_sync")}
+        coverage = []
+        for code in config.competitions:
+            state = league_state.get(code, {})
+            players_in_league = [r for r in rows if r["league"] == code]
+            team_ids = {r["team_id"] for r in players_in_league}
+            season = state.get("season", database.season)
+            confirmed = [squads[t] for t in team_ids if t in squads and squads[t]["season"] == season]
+            coverage.append(
+                {
+                    "code": code,
+                    "name": LEAGUES[code],
+                    "season": season,
+                    "state": "demo" if config.source == "demo" else state.get("state", "pending"),
+                    "players": len(players_in_league),
+                    "squads_loaded": len(confirmed),
+                    "expected_teams": state.get("expected_teams", 0),
+                    "players_with_stats": sum(
+                        r["minutes_played"] is not None or r["goals"] is not None for r in players_in_league
+                    ),
+                    "checked_at": state.get("checked_at"),
+                    "message": state.get(
+                        "message",
+                        "Connect a live provider to import complete squads."
+                        if config.source == "demo"
+                        else "Waiting for synchronization.",
+                    ),
+                }
+            )
+        indexed = sum(valid_index(row, ctx.engine, database.season) for row in rows)
+        stamps = [r["stats_updated_at"] for r in rows if r.get("stats_updated_at")]
+        oldest = min(stamps) if stamps else None
+        stale = bool(
+            oldest
+            and datetime.fromisoformat(oldest.replace("Z", "+00:00"))
+            < datetime.now(UTC) - timedelta(hours=config.refresh_hours * 2)
+        )
         return {
             "status": "ok",
-            "source": settings.source,
-            "synthetic": settings.source == "demo",
-            "offline": settings.offline,
-            "season": settings.season,
+            "source": config.source,
+            "provider": config.provider if config.source == "api" else "demo",
+            "synthetic": config.source == "demo",
+            "offline": config.offline,
+            "season": database.season,
+            "season_mode": config.season,
             "players": len(rows),
-            "teams": teams,
-            "fixtures": matches,
+            "teams": len({r["team_id"] for r in rows if r["team_id"]}),
+            "fixtures": fixtures_count,
             "indexed": indexed,
-            "model_ready": engine.ready,
-            "search_ready": engine.ready and indexed > 0,
-            "model_id": engine.model_id,
-            "model_version": engine.version,
+            "model_ready": ctx.engine.ready,
+            "search_ready": ctx.engine.ready and indexed > 0,
+            "model_id": ctx.engine.model_id,
+            "model_version": ctx.engine.version,
             "last_sync": job_record(latest) if latest else None,
             "reference_date": database.meta("reference_date") or None,
+            "coverage": coverage,
+            "stats_stale": stale,
+            "oldest_stats_at": oldest,
+            "refresh_hours": config.refresh_hours,
+            "advanced_stats_available": config.source == "demo",
+            "data_message": "Historical synthetic sample. These are not current squads or real performance figures."
+            if config.source == "demo"
+            else "Current-season provider data. Availability depends on account coverage. Missing metrics remain unknown.",
+        }
+
+    @application.post("/data/connect", status_code=202)
+    def connect_data(body: ConnectRequest) -> dict[str, str]:
+        nonlocal current
+        with switch_lock:
+            old = current
+            if old.manager.thread and old.manager.thread.is_alive():
+                raise MatchdayError(
+                    "SYNC_IN_PROGRESS",
+                    "Wait for the current synchronization to finish before changing providers.",
+                    409,
+                )
+            source = "demo" if body.provider == "demo" else "api"
+            provider = body.provider if source == "api" else "api-football"
+            config = replace(
+                old.settings,
+                source=source,
+                provider=provider,
+                api_key=body.api_key.get_secret_value().strip() if source == "api" else "",
+                db_path=old.settings.db_path.parent / f"matchdaydb-{body.provider}.sqlite3",
+                season="auto",
+                offline=False,
+            )
+            new = build_services(config)
+            new.database.initialize()
+            if source == "api":
+                verifier = FootballClient(config, new.database, threading.Event())
+                try:
+                    verifier.get("status" if provider == "api-football" else "competitions")
+                finally:
+                    verifier.close()
+            run_id = new.manager.start(SyncRequest())
+            old.manager.close()
+            current = new
+            application.state.database, application.state.manager = new.database, new.manager
+        return {
+            "run_id": run_id,
+            "provider": body.provider,
+            "status_url": f"/sync/{run_id}",
+            "key_storage": "server_memory_only",
         }
 
     @application.post("/sync", status_code=202)
     def sync(body: SyncRequest) -> dict[str, str]:
-        run_id = manager.start(body)
+        with switch_lock:
+            run_id = current.manager.start(body)
         return {"run_id": run_id, "status_url": f"/sync/{run_id}"}
 
     @application.get("/sync/{run_id}")
-    def sync_status(run_id: uuid.UUID) -> dict[str, Any]:
-        with database.read() as connection:
+    def sync_status(run_id: uuid.UUID, ctx: Annotated[Services, Depends(services)]) -> dict[str, Any]:
+        with ctx.database.read() as connection:
             row = connection.execute("SELECT * FROM sync_runs WHERE run_id=?", (str(run_id),)).fetchone()
         if row is None:
             raise MatchdayError("JOB_NOT_FOUND", "No synchronization has this ID.", 404)

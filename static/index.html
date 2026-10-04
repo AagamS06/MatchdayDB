@@ -3,81 +3,64 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
-  <meta name="description" content="MatchdayDB: local football scouting, tactical search, and player similarity.">
-  <title>MatchdayDB · Scout your next move</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23c4f36b'/%3E%3Cpath d='M7 23V9l9 9 9-9v14' fill='none' stroke='%23101b12' stroke-width='4'/%3E%3C/svg%3E">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="MatchdayDB. Player discovery and squad planning across Europe's five major leagues. Created by Aagam Shah.">
+  <title>MatchdayDB | Player scouting</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23d6e566'/%3E%3Cpath d='M8 23V10l8 9 8-9v13' fill='none' stroke='%2318181b' stroke-width='3'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/theme.js"></script>
   <script src="/static/app.js" defer></script>
 </head>
 <body>
-  <a class="skip-link" href="#scouting">Skip to scouting</a>
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="MatchdayDB home"><span class="brand-mark" aria-hidden="true">M</span><span>Matchday<span class="brand-light">DB</span></span></a>
-    <nav aria-label="Main navigation"><a class="nav-active" href="#scouting">Scout engine</a><a href="#matchday">Matchday</a><a href="#system-status">Data status</a></nav>
-    <span class="local-tag"><span class="dot"></span> LOCAL INTELLIGENCE</span>
-  </header>
-
-  <main class="shell">
-    <section class="hero" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <div class="eyebrow"><span class="dash"></span> THE SCOUT'S WORKSPACE</div>
-        <h1 id="hero-title">Read the game.<br><span>Find your next player.</span></h1>
-        <p>Turn a tactical idea into a shortlist. Discover playing styles,<br class="desktop-break"> explore the numbers, and find the closest player twins.</p>
-        <div class="hero-meta"><span id="source-badge" class="badge badge-neutral">Connecting to local data</span><span id="season-label">Season catalogue</span></div>
-      </div>
-      <div class="pitch-art" aria-hidden="true">
-        <div class="pitch"><div class="pitch-circle"></div><div class="pitch-box top"></div><div class="pitch-box bottom"></div>
-          <i class="player-dot pd1"></i><i class="player-dot pd2"></i><i class="player-dot pd3"></i><i class="player-dot pd4"></i><i class="player-dot pd5 selected"></i><i class="player-dot pd6"></i><i class="player-dot pd7"></i><i class="player-dot pd8"></i><i class="player-dot pd9"></i><i class="player-dot pd10"></i><i class="player-dot pd11"></i>
-        </div><span class="pitch-label">A DIFFERENT WAY TO SEE THE GAME</span>
-      </div>
-    </section>
-
-    <section class="overview" aria-label="Database overview">
-      <div><span class="stat-label">PLAYERS IN SCOPE</span><strong id="player-count">—</strong><span class="stat-detail">Across every position</span></div>
-      <div><span class="stat-label">CLUBS REPRESENTED</span><strong id="team-count">—</strong><span class="stat-detail">A global scouting view</span></div>
-      <div><span class="stat-label">PROFILES INDEXED</span><strong id="index-count">—</strong><span class="stat-detail">384-dimensional profiles</span></div>
-      <div class="overview-status"><span class="stat-label">SCOUTING ENGINE</span><strong class="engine-state" id="engine-state">Starting</strong><span class="stat-detail" id="engine-detail">Checking local services</span></div>
-    </section>
-
-    <div class="workspace" id="scouting">
-      <section class="scout-main" aria-labelledby="scout-heading">
-        <div class="section-heading"><div><div class="eyebrow muted">01 / DISCOVER</div><h2 id="scout-heading">Build your shortlist</h2></div><span class="small-label">Tactics first. Evidence always.</span></div>
-        <form id="search-form" class="search-panel">
-          <label class="sr-only" for="query">Describe the player you are looking for</label>
-          <div class="search-row"><span class="search-icon" aria-hidden="true">⌕</span><input id="query" type="search" maxlength="1000" autocomplete="off" placeholder="Describe your ideal player or playing style"><button class="button primary" type="submit" id="search-button">Find players <span aria-hidden="true">↗</span></button></div>
-          <div class="quick-filters" aria-label="Try a tactical search"><span>Try a role</span><button type="button" class="chip" data-query="Box-to-box midfielder with progressive carries and energetic pressing">Box-to-box midfielder</button><button type="button" class="chip" data-query="Left-footed inverted right winger who cuts inside and creates chances">Inverted winger</button><button type="button" class="chip" data-query="Press-resistant defensive midfielder who breaks transition lines with progressive passes">Deep-lying playmaker</button></div>
-          <div class="filter-row">
-            <label>Position<select id="position"><option value="">All positions</option></select></label>
-            <label>Maximum age<input id="max-age" type="number" min="14" max="60" inputmode="numeric" placeholder="Any age"></label>
-            <label>Nationality<select id="nationality"><option value="">All nations</option></select></label>
-            <label>League<select id="league"><option value="">All leagues</option></select></label>
-            <button id="clear-filters" class="text-button" type="button">Reset</button>
-          </div>
-        </form>
-        <div class="results-heading"><div><h3 id="results-title">Player collection</h3><p id="results-meta">Loading player profiles</p></div><span class="mini-badge">PER 90 METRICS</span></div>
-        <p class="feedback hidden" id="search-feedback" role="status" aria-live="polite"></p>
-        <div class="player-grid" id="results" aria-live="polite" aria-busy="true"></div>
-        <div class="pagination" id="pagination"><button type="button" class="button secondary" id="previous-page" disabled>Previous</button><span id="page-label"></span><button type="button" class="button secondary" id="next-page" disabled>Next</button></div>
-      </section>
-
-      <aside class="sidebar">
-        <section class="twin-panel" aria-labelledby="twin-heading">
-          <div class="twin-icon" aria-hidden="true">⇄</div><div class="eyebrow muted">02 / COMPARE</div><h2 id="twin-heading">Find a player twin</h2><p>Start with a player you know.<br>Meet five with a similar style.</p>
-          <label for="twin-player">Your reference player</label><select id="twin-player"><option value="">Choose a player</option></select>
-          <div class="twin-controls"><label class="check-label"><input id="cross-role" type="checkbox"> Compare across roles</label><label class="check-label"><input id="hybrid-ranking" type="checkbox"> Include statistical similarity</label></div>
-          <p id="twin-feedback" class="twin-feedback" role="status" aria-live="polite">Select a player to explore their closest stylistic matches.</p><div id="twins" aria-live="polite"></div>
-          <p class="score-explainer" id="score-explainer">Bars show cosine similarity × 100, with negative values shown as 0%. Similarity is not a player quality rating.</p>
-        </section>
-        <section class="status-panel" id="system-status" aria-labelledby="status-heading"><div class="status-header"><h3 id="status-heading">Your data, in focus</h3><span class="dot" aria-hidden="true"></span></div><p id="provenance-text">Checking data provenance.</p><div class="status-line"><span>Last sync</span><strong id="last-sync">Not yet synchronized</strong></div><div class="status-line"><span>Source</span><strong id="source-text">Connecting</strong></div><button id="sync-button" class="button secondary full-width" type="button">↻ Sync data</button><p id="sync-feedback" class="sync-feedback" role="status" aria-live="polite"></p></section>
-      </aside>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="MatchdayDB home"><span class="brand-mark" aria-hidden="true">M</span>Matchday<span class="brand-suffix">DB</span></a>
+      <div class="header-actions"><span id="source-badge" class="tag">Loading data</span><button id="theme-toggle" class="button quiet" type="button" aria-label="Switch colour theme">Light theme</button><a class="button quiet github-link" href="https://github.com/AagamS06/MatchdayDB" target="_blank" rel="noopener noreferrer">GitHub ↗</a></div>
     </div>
+  </header>
+  <main id="main" class="shell">
+    <div class="intro"><div><h1>Scouting workspace</h1><p>Find players. Compare profiles. Plan your squad.</p></div><div class="catalogue-meta"><span id="catalogue-count">Connecting</span><span id="season-label"></span></div></div>
+    <nav class="tabs" aria-label="Workspace sections"><button type="button" class="tab active" data-view="players" aria-current="page">Players</button><button type="button" class="tab" data-view="twins">Player twins</button><button type="button" class="tab" data-view="team">Team scout</button><button type="button" class="tab" data-view="data">Data &amp; connection</button></nav>
+    <div class="notice" id="data-notice"><p id="data-notice-text">Checking the local database.</p><button class="text-button" type="button" id="notice-action">View data</button></div>
 
-    <section class="matchday-section" id="matchday" aria-labelledby="matchday-heading"><div class="section-heading"><div><div class="eyebrow muted">03 / THE MATCHDAY PICTURE</div><h2 id="matchday-heading">From the fixture feed</h2></div><span id="fixture-source" class="small-label">Provider snapshots</span></div><div id="fixtures" class="fixture-grid"><p class="subtle">Fixtures will appear after synchronization.</p></div></section>
-    <footer><a class="brand footer-brand" href="#"><span class="brand-mark small" aria-hidden="true">M</span>MatchdayDB</a><span>Football intelligence. On your machine.</span><a href="/openapi.json">API reference ↗</a></footer>
+    <section id="view-players" class="view" aria-labelledby="players-title">
+      <h2 id="players-title" class="sr-only">Player explorer</h2>
+      <form id="search-form" class="search-form">
+        <div class="search-row"><label class="mode-label"><span class="sr-only">Search mode</span><select id="search-mode"><option value="players">Player name</option><option value="style">Playing style</option></select></label><label class="query-label"><span class="sr-only">Search players</span><input id="query" type="search" maxlength="200" autocomplete="off" placeholder="Search a player, e.g. Bukayo Saka"></label><button class="button primary" type="submit">Search</button></div>
+        <div class="chips hidden" id="style-chips" aria-label="Tactical search suggestions"><button type="button" class="chip" data-query="Box-to-box midfielder with progressive carries and energetic pressing">Box-to-box midfielder</button><button type="button" class="chip" data-query="Inverted winger who cuts inside and creates chances">Inverted winger</button><button type="button" class="chip" data-query="Press-resistant defensive midfielder who breaks transition lines">Deep-lying playmaker</button></div>
+        <div class="filters"><label>Team<input id="team-filter" type="search" list="team-list" maxlength="200" autocomplete="off" placeholder="Search a team"></label><label>Position<select id="position"><option value="">All positions</option></select></label><label>Maximum age<input id="max-age" type="number" min="14" max="60" placeholder="Any age"></label><label>Nationality<select id="nationality"><option value="">All countries</option></select></label><label>Sort by<select id="sort-by"><option value="name:asc">Name · A to Z</option><option value="age:asc">Age · youngest first</option><option value="age:desc">Age · oldest first</option><option value="position:asc">Position</option><option value="rating:desc">Rating · highest first</option><option value="goals:desc">Goals · most first</option><option value="assists:desc">Assists · most first</option><option value="minutes_played:desc">Minutes · most first</option><option value="team:asc">Team · A to Z</option><option value="updated_at:desc">Recently updated</option></select></label><button id="reset-filters" class="text-button" type="button">Reset</button></div>
+        <fieldset class="league-filter"><legend class="sr-only">League</legend><label><input type="radio" name="league" value="" checked><span>All leagues</span></label><label><input type="radio" name="league" value="PL"><span>Premier League</span></label><label><input type="radio" name="league" value="PD"><span>La Liga</span></label><label><input type="radio" name="league" value="BL1"><span>Bundesliga</span></label><label><input type="radio" name="league" value="SA"><span>Serie A</span></label><label><input type="radio" name="league" value="FL1"><span>Ligue 1</span></label></fieldset>
+      </form>
+      <div class="section-line"><div><h2 id="results-title">All players</h2><p id="results-meta">Loading the catalogue</p></div><span id="ranking-note" class="subtle">Unknown values sort last</span></div>
+      <p id="search-feedback" class="feedback hidden" role="status" aria-live="polite"></p>
+      <div id="results" class="player-grid" aria-busy="true"></div>
+      <div class="pagination" id="pagination"><button class="button secondary" id="previous-page" type="button" disabled>Previous</button><span id="page-label"></span><button class="button secondary" id="next-page" type="button" disabled>Next</button></div>
+    </section>
+
+    <section id="view-twins" class="view hidden" aria-labelledby="twins-title">
+      <div class="section-line"><div><h2 id="twins-title">Player twins</h2><p>Five profiles closest to your reference player.</p></div></div>
+      <div class="panel picker-panel"><label>Find a reference player<input id="twin-search" type="search" autocomplete="off" placeholder="Filter the player list by name or team"></label><label>Reference player<select id="twin-player"><option value="">Choose a player</option></select></label><div class="check-row"><label><input type="checkbox" id="cross-role"> Compare across roles</label><label><input type="checkbox" id="hybrid-ranking"> Include statistical similarity</label></div></div>
+      <p id="twin-feedback" class="feedback" role="status" aria-live="polite">Select a player to find their twins.</p><div id="twins" class="player-grid"></div><p class="footnote">Similarity describes profile overlap, not player quality. Sparse profiles may produce tied scores. Ratings come from the selected provider.</p>
+    </section>
+
+    <section id="view-team" class="view hidden" aria-labelledby="team-title">
+      <div class="section-line"><div><h2 id="team-title">Team scout</h2><p>Assess squad needs and find relevant players across the database.</p></div></div>
+      <form id="team-form" class="panel team-form"><label>Search a team<input id="audit-team" type="search" list="team-list" autocomplete="off" placeholder="Start typing a club name" required></label><label>Recruitment age limit<input id="audit-age" type="number" min="14" max="60" placeholder="Any age"></label><button type="submit" class="button primary">Analyse squad</button></form>
+      <p id="team-feedback" class="feedback" role="status" aria-live="polite">Choose a club to review its squad.</p><div id="team-results"></div>
+      <p class="footnote">Recommendations explain the available evidence. Formation, injuries, wages, contracts and transfer availability are not included.</p>
+    </section>
+
+    <section id="view-data" class="view hidden" aria-labelledby="data-title">
+      <div class="section-line"><div><h2 id="data-title">Data &amp; connection</h2><p>Know what is loaded and when it was refreshed.</p></div><button type="button" id="sync-button" class="button secondary">Refresh data</button></div>
+      <div class="data-layout"><section class="panel"><h3>Connect live data</h3><p class="subtle">API-Football is the primary option for current squads, player stats and ratings across all five leagues.</p><form id="connect-form"><label>Provider<select id="provider"><option value="api-football">API-Football</option><option value="football-data">football-data.org</option><option value="demo">Synthetic demo</option></select></label><label id="key-label">API key<input id="api-key" type="password" autocomplete="off" spellcheck="false" minlength="8" maxlength="256" required></label><p class="footnote">The key stays in this local server's memory until it stops. It is never saved in your browser or project files.</p><button class="button primary" id="connect-button" type="submit">Connect &amp; sync</button></form><p id="connect-feedback" class="feedback" role="status" aria-live="polite"></p><a href="https://dashboard.api-football.com/register" target="_blank" rel="noopener noreferrer" class="text-link">Get an API-Football key ↗</a><p class="footnote">Current-season access depends on your plan. A complete five-league import can exceed a free daily quota. Completed pages are cached so an interrupted import can resume.</p></section><section class="panel"><h3>Dataset status</h3><dl class="status-list"><div><dt>Provider</dt><dd id="provider-name">Connecting</dd></div><div><dt>Last synchronization</dt><dd id="last-sync">No sync yet</dd></div><div><dt>Search index</dt><dd id="index-status">Starting</dd></div><div><dt>Oldest statistical update</dt><dd id="stats-date">Unknown</dd></div></dl><p id="data-description" class="subtle"></p><p id="sync-feedback" class="feedback" role="status" aria-live="polite"></p><details><summary>Coverage limits</summary><p>API-Football supplies supported season appearances, minutes, goals, assists and its own 0–10 ratings. These adapters do not supply xG, xA or progressive passes. Those values remain unknown in live mode. football-data.org squad and scorer access depends on your account.</p><p>The demo contains 60 historical, synthetic profiles. Live imports have no 60-player cap and load all available squads and player pages.</p></details></section></div>
+      <div class="table-wrap"><table><caption>Five-league coverage</caption><thead><tr><th>League</th><th>Season</th><th>Squads</th><th>Players</th><th>With stats</th><th>Status</th></tr></thead><tbody id="coverage-table"></tbody></table></div>
+      <div class="section-line fixtures-heading"><h3>Recent and upcoming fixtures</h3><span class="subtle" id="fixture-source"></span></div><div id="fixtures" class="fixture-grid"></div>
+    </section>
+    <footer><span>Created by <a href="https://github.com/AagamS06" target="_blank" rel="noopener noreferrer">Aagam Shah (AagamS06)</a></span><div><a href="https://github.com/AagamS06/MatchdayDB" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a><a href="/openapi.json">API reference</a></div></footer>
   </main>
-
-  <dialog id="player-dialog" aria-labelledby="dialog-title"><div class="dialog-top"><span class="eyebrow muted">PLAYER DOSSIER</span><button id="close-dialog" class="icon-button" type="button" aria-label="Close player details">×</button></div><div id="dialog-content"></div><button id="dialog-compare" class="button primary full-width" type="button">Find this player's twins ↗</button></dialog>
-  <noscript><p class="noscript">Enable JavaScript to use the dashboard. The JSON API is available at /players and /openapi.json.</p></noscript>
+  <datalist id="team-list"></datalist>
+  <dialog id="player-dialog" aria-labelledby="dialog-title"><div class="dialog-header"><span class="subtle">Player profile</span><button type="button" id="close-dialog" class="button quiet" aria-label="Close player profile">Close ×</button></div><div id="dialog-content"></div><button class="button primary" id="dialog-compare" type="button">Find player twins</button></dialog>
+  <noscript><p>Enable JavaScript to use the dashboard. JSON data is available at /players.</p></noscript>
 </body>
 </html>

@@ -194,7 +194,10 @@ def test_provider_429_respects_long_retry_after(database: Database) -> None:
         return httpx.Response(429, headers={"Retry-After": "300"})
 
     client = FootballClient(
-        Settings(source="api", api_key="test-key"), database, threading.Event(), httpx.MockTransport(handler)
+        Settings(source="api", provider="football-data", api_key="test-key"),
+        database,
+        threading.Event(),
+        httpx.MockTransport(handler),
     )
     try:
         with pytest.raises(MatchdayError) as error:
@@ -223,7 +226,10 @@ def test_provider_does_not_retry_permanent_errors(database: Database, status: in
         return httpx.Response(status)
 
     client = FootballClient(
-        Settings(source="api", api_key="test-key"), database, threading.Event(), httpx.MockTransport(handler)
+        Settings(source="api", provider="football-data", api_key="test-key"),
+        database,
+        threading.Event(),
+        httpx.MockTransport(handler),
     )
     try:
         with pytest.raises(MatchdayError) as error:
@@ -249,7 +255,7 @@ def test_provider_partial_squad_entitlement(tmp_path: Path) -> None:
             return httpx.Response(200, json={"teams": [{"id": 1, "name": "Test club"}]})
         return httpx.Response(403)
 
-    settings = Settings(source="api", api_key="test-key", db_path=database.path)
+    settings = Settings(source="api", provider="football-data", api_key="test-key", db_path=database.path)
     client = FootballClient(settings, database, threading.Event(), httpx.MockTransport(handler))
     result = sync_provider(settings, database, SyncRequest(), threading.Event(), client)
     assert result["state"] == "partial"

@@ -1,36 +1,30 @@
-# MatchdayDB Phases
+# MatchdayDB Delivery Phases
 
-Updated 3 October 2026. These statuses describe the delivered source, not a published release. GitHub publication was blocked by integration permissions; see Memory.
+| Phase | Outcome | Status |
+| --- | --- | --- |
+| 1. Foundation | Project requirements, structure, validated settings, SQLite and synthetic example | Complete |
+| 2. Scouting engine | CPU embeddings, tactical prose, cosine search, player twins and scalar filters | Complete |
+| 3. Local application | FastAPI, static dashboard, job lifecycle and fixture snapshots | Complete |
+| 4. User-requested redesign | Minimalist layout, neutral light/dark themes, player/team search, sorting and creator credit | Complete |
+| 5. Current multi-league ingestion | API-Football primary adapter, all five leagues, current season discovery, full pagination, current squad membership and visible coverage | Implemented; real-account entitlement verification pending |
+| 6. Team scout | Depth, succession and statistical indicators with explained outside-club recommendations | Implemented and regression-tested |
+| 7. Delivery verification | Backend, schema migration, local model and browser verification; updated complete source archive | Final evidence in Memory.md |
+| 8. Release hardening | Live-account tests, cross-platform CI execution, larger-catalogue profiling and accessibility review | Pending |
 
-| Phase | Scope | Status | Evidence |
-| --- | --- | --- | --- |
-| 0. Definition | Requirements, architecture, rules, design, handoff | Complete | Seven aligned project documents |
-| 1. Storage | Schema, records, transactions, source guard, vector math | Complete | Integrity, rollback, age, source, and cosine tests |
-| 2. Demo | Deterministic roster, metrics, bios, match snapshots | Complete | 60 players, 20 clubs, repeatable seed and event tests |
-| 3. Scout | CPU embeddings, fingerprints, SQL filters, semantic and hybrid twins | Complete | Real-model disconnected search and twin retrieval |
-| 4. Provider | API adapter, quota, retries, partial coverage, polling | Implemented; live verification remains | Mock HTTP entitlement and rate-limit tests |
-| 5. Dashboard | FastAPI static serving, search, chips, twins, dossiers | Complete | HTTP/static checks and desktop/mobile Chromium verification |
-| 6. Release hardening | Platform, entitlement, relevance, performance, accessibility | In progress | Gates below |
+## Current release boundaries
 
-## Remaining release gates
+Version 0.2 is a complete local implementation. A live API-Football account with suitable current-season access and sufficient quota is required to populate a complete current catalogue. No new provider credential was supplied or created during development. No bundled demo figures are claimed as current statistics.
 
-1. Run the CI matrix on Linux, macOS, and Windows with Python 3.11 and 3.12. Local evidence is limited to the environment in Memory.
-2. Use an authorized real football-data.org account to verify competition, match, team, and squad coverage. Do not assume squads are included free.
-3. Review at least 12 tactical queries across roles independently of the implementation. The real-model smoke test proves operation, not broad scouting accuracy.
-4. Measure latency and memory on larger catalogues before stating a scale target. Current exact ranking loads candidate rows into memory.
-5. Review model/provider attribution and data redistribution terms before release.
-6. Verify a clean first run, cached offline operation, missing-cache errors, and recovery on supported desktop environments.
-7. Complete an accessibility review before claiming WCAG conformance.
+Unsupported advanced metrics remain unavailable. New sources for xG, xA, progressive passing, injuries, contracts or wages require explicit field semantics, licensing review and account coverage. No provider access restrictions are bypassed.
 
-## Later extensions
+## Release work
 
-| Extension | Prerequisite |
-| --- | --- |
-| Real advanced player statistics | Licensed adapter, field provenance, competition/season scope migration |
-| Multi-season vector search | Composite index identity and season selection |
-| Quantitative keeper twins | Keeper-specific measures and validated comparison space |
-| Larger datasets | Profiling, streamed candidates, optional sqlite-vec |
-| Public deployment | Authentication, authorization, TLS, operations, concurrency design |
-| Model upgrades | Baseline evaluation and safe generation migration |
+1. Connect an authorized API-Football account and verify the five actual season selections, squad counts, pagination totals, quota resumption and latest-stat timestamps.
+2. Execute the configured Python 3.11/3.12 Linux/macOS/Windows CI matrix after repository publication is available.
+3. Profile catalogue search, index refresh and repeated health calls on a full multi-league database; add SQL pagination or cached index counts if measurements justify it.
+4. Review team-audit thresholds against analyst-labelled examples, including transfers, sparse early seasons and tactical differences.
+5. Complete an accessibility audit and deployment design before public multi-user hosting.
 
-Keep technical details in Architecture and current handoff evidence in Memory.
+## Repository delivery
+
+The initial GitHub write attempt was rejected with HTTP 403, “Resource not accessible by integration.” No branch or pull request was created. The supplied archive is the complete source deliverable. The baseline patch targets the original README-only repository. Remote publication remains separate from local implementation and verification.

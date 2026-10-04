@@ -33,6 +33,7 @@ pytest==9.1.1
 PyYAML==6.0.3
 requests==2.34.2
 ruff==0.16.10
+socksio==1.0.0
 starlette==1.7.0
 tokenizers==0.23.2
 tqdm==4.70.1

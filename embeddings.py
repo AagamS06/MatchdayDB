@@ -174,7 +174,7 @@ def valid_index(row: dict[str, Any], embedder: LocalEmbedder, season: str) -> bo
     valid = bool(
         row.get("embedding") is not None
         and row.get("stored_hash") == profile_hash(row)
-        and row.get("embedding_season") == season
+        and row.get("embedding_season") == row.get("season", season)
         and row.get("model_id") == embedder.model_id
         and row.get("model_version") == embedder.version
     )

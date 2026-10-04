@@ -72,8 +72,9 @@ def profile_hash(row: dict[str, Any]) -> str:
 
 
 class Database:
-    def __init__(self, path: Path, source: str, season: str) -> None:
+    def __init__(self, path: Path, source: str, season: str, provider: str = "football-data") -> None:
         self.path, self.source, self.season = Path(path), source, season
+        self.provider = provider
 
     def connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=5, isolation_level=None)
@@ -117,10 +118,36 @@ class Database:
                 version = connection.execute(
                     "SELECT value FROM app_meta WHERE key='schema_version'"
                 ).fetchone()
-                if version and version[0] != "1":
+                if version and version[0] not in {"1", "2"}:
                     raise MatchdayError(
                         "SCHEMA_VERSION", "This database needs a compatible application version.", 503
                     )
+                if version and version[0] == "1":
+                    connection.execute("BEGIN IMMEDIATE")
+                    try:
+                        connection.execute(
+                            "ALTER TABLE players ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1))"
+                        )
+                        connection.execute(
+                            "ALTER TABLE player_stats ADD COLUMN rating REAL CHECK (rating BETWEEN 0 AND 10)"
+                        )
+                        connection.execute("ALTER TABLE player_stats ADD COLUMN rating_source TEXT")
+                        connection.execute("ALTER TABLE player_stats ADD COLUMN stats_updated_at TEXT")
+                        connection.execute(
+                            "ALTER TABLE player_stats ADD COLUMN stats_team_id INTEGER REFERENCES teams(team_id)"
+                        )
+                        for row in connection.execute(
+                            "SELECT player_id,name,nationality FROM players"
+                        ).fetchall():
+                            connection.execute(
+                                "UPDATE players SET name_key=?,nationality_key=? WHERE player_id=?",
+                                (name_key(row["name"]), name_key(row["nationality"] or ""), row["player_id"]),
+                            )
+                        connection.execute("UPDATE app_meta SET value='2' WHERE key='schema_version'")
+                        connection.commit()
+                    except BaseException:
+                        connection.rollback()
+                        raise
             connection.executescript("BEGIN IMMEDIATE;\n" + (ROOT / "schema.sql").read_text() + "\nCOMMIT;")
         finally:
             connection.close()
@@ -131,6 +158,19 @@ class Database:
                     "SOURCE_MISMATCH", "Use separate databases for synthetic and provider data.", 409
                 )
             self.set_meta(connection, "source", self.source)
+            provider = connection.execute("SELECT value FROM app_meta WHERE key='provider'").fetchone()
+            if self.source == "api" and provider and provider[0] != self.provider:
+                raise MatchdayError(
+                    "PROVIDER_MISMATCH", "Use separate databases for different providers.", 409
+                )
+            if self.source == "api" and not provider and self.provider != "football-data":
+                if connection.execute("SELECT count(*) FROM players").fetchone()[0]:
+                    raise MatchdayError(
+                        "PROVIDER_MISMATCH",
+                        "An existing provider database cannot be reused for API-Football.",
+                        409,
+                    )
+            self.set_meta(connection, "provider", self.provider)
 
     @staticmethod
     def set_meta(connection: sqlite3.Connection, key: str, value: str) -> None:
@@ -183,6 +223,7 @@ class Database:
             updated_at=utc_now(),
         )
         self._upsert(connection, "players", record, ("player_id",))
+        connection.execute("UPDATE players SET is_active=1 WHERE player_id=?", (player.player_id,))
 
     def upsert_stats(self, connection: sqlite3.Connection, stats: PlayerStats) -> None:
         self._upsert(connection, "player_stats", stats.model_dump(), ("player_id", "season"))
@@ -195,7 +236,7 @@ class Database:
         player_id: int | None = None,
     ) -> list[dict[str, Any]]:
         filters = filters or Filters()
-        clauses, values = ["1=1"], [self.season]
+        clauses, values = ["p.is_active=1"], []
         if player_id is not None:
             clauses.append("p.player_id=?")
             values.append(player_id)
@@ -208,6 +249,19 @@ class Database:
             if value is not None:
                 clauses.append(f"{column}=?")
                 values.append(value)
+        for expression, query in (("p.name_key", filters.q), ("t.name", filters.team)):
+            if query and expression == "p.name_key":
+                escaped = name_key(query).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                clauses.append(
+                    "(p.name_key LIKE ? ESCAPE '\\' OR EXISTS (SELECT 1 FROM player_aliases a WHERE a.player_id=p.player_id AND a.alias_key LIKE ? ESCAPE '\\'))"
+                )
+                values.extend([f"%{escaped}%", f"%{escaped}%"])
+            elif query:
+                clauses.append(
+                    "(lower(t.name) LIKE ? ESCAPE '\\' OR lower(COALESCE(t.short_name,'')) LIKE ? ESCAPE '\\')"
+                )
+                escaped = query.lower().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                values.extend([f"%{escaped}%", f"%{escaped}%"])
         if filters.max_age is not None:
             year = filters.as_of.year - filters.max_age - 1
             try:
@@ -219,13 +273,15 @@ class Database:
         sql = f"""SELECT p.*, t.name AS team_name, t.league,
             s.matches_played,s.minutes_played,s.goals,s.assists,s.xG,s.xA,
             s.progressive_carries,s.progressive_passes,s.tackles_won,s.pass_accuracy,
-            ? AS season, e.embedding,e.tactical_summary,e.model_id,e.model_version,
+            s.rating,s.rating_source,s.stats_updated_at,COALESCE(l.season,?) AS season,
+            e.embedding,e.tactical_summary,e.model_id,e.model_version,
             e.profile_hash AS stored_hash,e.season AS embedding_season,e.updated_at AS indexed_at
             FROM players p LEFT JOIN teams t ON p.team_id=t.team_id
-            LEFT JOIN player_stats s ON s.player_id=p.player_id AND s.season=?
+            LEFT JOIN league_status l ON l.code=t.league
+            LEFT JOIN player_stats s ON s.player_id=p.player_id AND s.season=COALESCE(l.season,?) AND (s.stats_team_id IS NULL OR s.stats_team_id=p.team_id)
             LEFT JOIN player_embeddings e ON e.player_id=p.player_id
             WHERE {" AND ".join(clauses)} ORDER BY p.player_id"""
-        parameters = [self.season, *values]
+        parameters = [self.season, self.season, *values]
         if connection is not None:
             return [dict(row) for row in connection.execute(sql, parameters)]
         with self.read() as reader:
@@ -257,10 +313,35 @@ class Database:
                     version,
                     DIMENSION,
                     expected,
-                    self.season,
+                    row["season"],
                 ),
             )
         return True
+
+    def replace_squad(
+        self, connection: sqlite3.Connection, team_id: int, season: str, players: list[Player]
+    ) -> None:
+        """Replace membership only after a complete, validated nonempty snapshot."""
+        if not players:
+            raise MatchdayError(
+                "SQUAD_EMPTY", "Provider returned no squad; previous membership was retained.", 502
+            )
+        if len({p.player_id for p in players}) != len(players):
+            raise MatchdayError("SQUAD_DUPLICATE", "Squad contains duplicate player IDs.", 502)
+        connection.execute("UPDATE players SET is_active=0,team_id=NULL WHERE team_id=?", (team_id,))
+        for player in players:
+            self.upsert_player(connection, player)
+        connection.execute(
+            "INSERT INTO squad_sync VALUES (?,?,?) ON CONFLICT(team_id) DO UPDATE SET season=excluded.season,synced_at=excluded.synced_at",
+            (team_id, season, utc_now()),
+        )
+
+    def set_league_status(self, code: str, season: str, state: str, expected: int, message: str = "") -> None:
+        with self.transaction() as connection:
+            connection.execute(
+                "INSERT INTO league_status VALUES (?,?,?,?,?,?) ON CONFLICT(code) DO UPDATE SET season=excluded.season,state=excluded.state,expected_teams=excluded.expected_teams,checked_at=excluded.checked_at,message=excluded.message",
+                (code, season, state, expected, utc_now(), message),
+            )
 
     def upsert_fixture(self, connection: sqlite3.Connection, fixture: Fixture) -> bool:
         data = fixture.model_dump(mode="json")

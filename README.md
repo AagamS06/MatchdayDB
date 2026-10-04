@@ -1,149 +1,179 @@
 # MatchdayDB
 
-**Local football data. Semantic scouting. A dashboard with no frontend build.**
+A local player scouting and squad-planning workspace, created by [Aagam Shah (AagamS06)](https://github.com/AagamS06).
 
-Describe a playing style, inspect the numbers, or find a familiar player's closest stylistic twins. MatchdayDB combines SQLite, local CPU embeddings, football-data.org ingestion, and a dark dashboard served by FastAPI.
+Browse players by name, team and league. Compare playing styles, inspect provider ratings, and find recruitment options for identified squad needs. Python and FastAPI serve the entire application, including the vanilla HTML/CSS/JavaScript frontend. No frontend build or GPU is required.
 
-## Features
+## What's included
 
-- Natural-language search with explicit age, position, nationality, team, and league filters through the API. The dashboard exposes age, position, nationality, and league.
-- A complete player dropdown and top-five Player Twin matches with similarity bars.
-- Interactive dossiers with tactical bios, xG, xA, progressive passes/carries, tackles, and pass accuracy.
-- A deterministic 60-player, 20-club demonstration requiring no football API key.
-- Provider ingestion with persistent quota control, retry handling, fixture revisions, and inspectable sync jobs.
+- Minimalist interface with neutral light and dark themes, a restrained yellow-green accent and a persistent theme preference.
+- Player-name search, accent-insensitive matching, team search, league selection, position, nationality and maximum-age filters.
+- Sorting by name, age, position, rating, team, goals, assists, minutes and update time. Unknown values always appear last.
+- Natural-language scouting and a searchable Player Twin picker with five ranked matches.
+- A team scout that reports supported depth, succession and statistical concerns, explains its evidence, and suggests players from other clubs.
+- API-Football as the primary live-data option. football-data.org remains available.
+- Current-season discovery and all available player pages across the Premier League, La Liga, Bundesliga, Serie A and Ligue 1.
+- Inspectable coverage, refresh times, resumable API-Football imports, and separate databases for each provider.
 
-The demonstration uses real player names and **synthetic performance evidence**. Metrics, valuations, bios, and match results are simulated. Club associations illustrate 2024/2025, with reference date 1 June 2025. They are not current verified player statistics.
+## Start locally
 
-## Quick start
-
-Requires Python 3.11 or newer. Python 3.12 is locally verified. Internet is needed to install dependencies and download the model once. No GPU, football account, Node installation, or frontend build is required.
+Use Python 3.11 or newer. Extract the project archive and open its `MatchdayDB` folder. If the source has been uploaded to GitHub, you can also clone [AagamS06/MatchdayDB](https://github.com/AagamS06/MatchdayDB).
 
 ```bash
-git clone https://github.com/AagamS06/MatchdayDB.git
-cd MatchdayDB
 python -m venv .venv
 ```
 
-Activate on macOS/Linux:
-
-```bash
-source .venv/bin/activate
-```
-
-Or on Windows PowerShell:
+Activate on Windows PowerShell:
 
 ```powershell
 .venv\Scripts\Activate.ps1
 ```
 
-Install and start:
+Or on macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+Install and run:
 
 ```bash
 python -m pip install -r requirements.txt
 python app.py
 ```
 
-Open [http://localhost:8000](http://localhost:8000). Startup seeds the demo and indexes profiles in the background. Browse cards while the first model download completes. The status panel shows readiness or recovery instructions.
+Open [http://localhost:8000](http://localhost:8000). The first semantic-model download needs internet. Browsing, filters, sorting and team audits remain available while the model prepares.
 
-If another project has already set `FOOTBALL_API_KEY` in your shell, set `MATCHDAY_SOURCE=demo` to select the demonstration explicitly.
+## Connect current data
 
-## Cached offline mode
+1. Obtain your own key from the [API-Football dashboard](https://dashboard.api-football.com/register).
+2. Open **Data & connection** in MatchdayDB.
+3. Select **API-Football**, enter the key and choose **Connect & sync**.
+4. Watch the five-league coverage table. Players appear as squads and statistics are imported.
 
-Prepare the model once while connected:
+The connection form keeps the key only in the local server's memory. It does not write it into browser storage, a database, an environment file or the source code. Restarting the server requires reconnecting unless you configure an environment variable.
+
+A key belongs to your provider account. Changing a key alone does not grant a different subscription's access. Check current-season access and request quotas in that account. A complete five-league catalogue can require hundreds of calls and exceed a free daily quota. Completed API-Football pages from an incomplete run are cached for 48 hours. Resume after the quota resets. Unfinished and oldest league catalogues are processed first, so completed leagues do not continually consume the next day’s quota. A successful catalogue import clears its temporary pages so the next refresh fetches new records.
+
+Live ingestion has no 60-player cap. The default competitions are:
+
+| League | Code | API-Football ID |
+| --- | --- | --- |
+| English Premier League | `PL` | `39` |
+| La Liga | `PD` | `140` |
+| Bundesliga | `BL1` | `78` |
+| Serie A | `SA` | `135` |
+| Ligue 1 | `FL1` | `61` |
+
+### What each dataset contains
+
+| Dataset | Available data | Limits |
+| --- | --- | --- |
+| API-Football | Current squads; supported season appearances, minutes, goals, assists and provider ratings; fixtures | Availability and current-season access depend on the account. These adapters do not supply xG, xA or progressive actions. |
+| football-data.org | Entitled current squads, fixtures and scorer entries | Squad/scorer access depends on the plan. Scorer entries are a partial statistics feed. No per-player minutes or ratings are inferred. |
+| Demo | 60 real-world player names, illustrative 2024/2025 club associations, synthetic metrics, ratings, bios and fixtures | Historical demonstration only. It is not a current squad database and does not become current when refreshed. |
+
+Unknown metrics stay null and display as a dash. Tackles are not relabelled as tackles won, and ordinary passes are not relabelled as progressive passes. API-Football season statistics are selected for the player's current registered club and league. Previous-club season totals cannot overwrite current-club statistics. Players without statistical appearances may initially have an unknown date of birth or nationality.
+
+The local database records when it fetched a value, not a guarantee of the provider's own update latency. Sparse statistical profiles reduce the precision of natural-language and twin matching. Similarity is separate from the provider's 0–10 performance rating.
+
+## Keep a connection across server restarts
+
+The simplest option is to export the key before starting the app. In PowerShell:
+
+```powershell
+$secret = Read-Host "API-Football key" -AsSecureString
+$env:API_FOOTBALL_KEY = [System.Net.NetworkCredential]::new("", $secret).Password
+$env:MATCHDAY_PROVIDER = "api-football"
+$env:MATCHDAY_SOURCE = "api"
+python app.py
+```
+
+In Bash:
+
+```bash
+read -rsp 'API-Football key: ' API_FOOTBALL_KEY
+export API_FOOTBALL_KEY
+export MATCHDAY_PROVIDER=api-football
+export MATCHDAY_SOURCE=api
+python app.py
+```
+
+The legacy adapter reads `FOOTBALL_API_KEY` when `MATCHDAY_PROVIDER=football-data`. Neither adapter silently substitutes demo records if authentication fails.
+
+## Search and team planning
+
+Use **Player name** for a literal name search. Use the team field to search a club name or choose a suggested club. Use **Playing style** for a tactical description or one of the quick chips. Tactical results rank by similarity; the scalar sort control applies to the full player catalogue.
+
+**Player twins** accepts any loaded player. Semantic ranking is the default. Optional hybrid ranking uses 75% normalized semantic similarity and 25% standardized statistical similarity. It requires at least four comparable features and an adequate same-role cohort, so it may be unavailable on a basic live feed.
+
+**Team scout** uses explainable rules:
+
+- Depth checks require a confirmed current-season roster with at least 16 players and at least 90% known broad positions. Planning targets are 2 goalkeepers, 7 defenders, 6 midfielders and 4 forwards.
+- Succession checks flag an outfield group when at least two-thirds of its known-age players are 30 or older. At least three known ages and 80% age coverage are required. Suggested succession candidates are 25 or younger.
+- Performance checks require 450 minutes per player and comparable evidence from at least five other clubs in the same league and season. A group below the 30th percentile and below 85% of the peer-club median produces an indicator.
+- Recommendations exclude the selected club, respect the recruitment age limit, and explain their measurable improvement or positional relevance. Unsupported checks are listed as skipped.
+
+These are planning indicators. They do not infer injuries, formation, contracts, wages, availability for transfer or causation from statistics.
+
+## Configuration
+
+Settings come from the environment. `.env.example` documents them; it is not loaded automatically.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `API_FOOTBALL_KEY` | Absent | Primary provider credential |
+| `FOOTBALL_API_KEY` | Absent | Legacy provider credential |
+| `MATCHDAY_PROVIDER` | `api-football` | Uses `football-data` automatically if only its legacy key is present |
+| `MATCHDAY_SOURCE` | `auto` | Demo without the selected provider's key, API with one |
+| `MATCHDAY_SEASON` | `auto` | Discover current season from each provider league; explicit year/season supported |
+| `MATCHDAY_COMPETITIONS` | `PL,PD,BL1,SA,FL1` | League scope |
+| `MATCHDAY_REFRESH_HOURS` | `24` | Normal squad/stat refresh interval, 1–168 |
+| `MATCHDAY_POLL_SECONDS` | `0` | Disabled, or at least 60 seconds |
+| `MATCHDAY_REQUESTS_PER_MINUTE` | `10` | Local quota ceiling, 1–30; football-data.org remains capped at 10 |
+| `MATCHDAY_OFFLINE` | `false` | Disable provider requests and model downloads |
+| `MATCHDAY_DB_PATH` | Provider-specific file in `var/` | Custom database; provider identity is enforced |
+| `MATCHDAY_MODEL_CACHE` | `.cache/models/` | Local model assets |
+| `MATCHDAY_MODEL_THREADS` | `2` | CPU threads, 1–32 |
+
+**Refresh data** forces a squad/stat refresh; cached pages from an incomplete API-Football run remain reusable. Polling checks fixtures while respecting the normal catalogue refresh interval. “Current” means the provider's latest available state, not a guaranteed instant push feed.
+
+To prepare offline use:
 
 ```bash
 python app.py --prepare-model
 ```
 
-Then run on macOS/Linux:
+Then set `MATCHDAY_OFFLINE=true` and keep the environment, database and `.cache/models/`. To open an existing provider database without a key, also set `MATCHDAY_SOURCE=api` and the corresponding `MATCHDAY_PROVIDER`.
 
-```bash
-export MATCHDAY_SOURCE=demo
-export MATCHDAY_OFFLINE=true
-python app.py
-```
+`python app.py --port 8080` changes the port. `--no-bootstrap` prevents startup synchronization. The supported deployment is a single local process on loopback, not an authenticated public website.
 
-Windows PowerShell:
+## Upgrading
 
-```powershell
-$env:MATCHDAY_SOURCE = "demo"
-$env:MATCHDAY_OFFLINE = "true"
-python app.py
-```
+Stop the old server and replace its source files with this version. Keep `var/`, `.cache/models/` and your own environment settings. SQLite schema version 1 automatically migrates to version 2 without dropping player records. Different providers use different files and IDs; their records are never merged by numeric ID.
 
-Keep the installed environment and `.cache/models/`. Missing assets produce an explicit readiness error rather than random vectors or disguised keyword matching. Frontend scripts, styles, illustrations, and font fallbacks are local.
+Remove an old `MATCHDAY_SEASON=2024/2025` override if you want current-season discovery. Set it to `auto` instead. The connection form always selects current-season mode.
 
-## Provider mode
-
-Obtain a key from [football-data.org](https://www.football-data.org/). In Bash, read it interactively without echoing it:
-
-```bash
-read -rsp 'Football API key: ' FOOTBALL_API_KEY
-export FOOTBALL_API_KEY
-export MATCHDAY_SOURCE=api
-export MATCHDAY_OFFLINE=false
-export MATCHDAY_COMPETITIONS=PL
-python app.py
-```
-
-In Windows PowerShell:
-
-```powershell
-$secret = Read-Host "Football API key" -AsSecureString
-$env:FOOTBALL_API_KEY = [System.Net.NetworkCredential]::new("", $secret).Password
-$env:MATCHDAY_SOURCE = "api"
-$env:MATCHDAY_OFFLINE = "false"
-$env:MATCHDAY_COMPETITIONS = "PL"
-python app.py
-```
-
-API mode uses a separate database and never adds demonstration metrics to provider records. The free plan advertises delayed scores, and squads depend on entitlement. The adapter reports denied resources. It does not assume advanced player statistics such as xG, xA, or progressive passes are available.
-
-Set `MATCHDAY_POLL_SECONDS=60` or longer to repeat synchronization. “Real-time” means polling the latest available provider state, not a push event stream. Retries share the ten-attempts-per-minute quota and jobs do not overlap.
-
-## Configuration
-
-Variables are read from the environment. `.env.example` documents settings but is not loaded automatically.
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `FOOTBALL_API_KEY` | Absent | Provider credential |
-| `MATCHDAY_SOURCE` | `auto` | Demo without a key, API with one; explicit mode overrides |
-| `MATCHDAY_OFFLINE` | `false` | Disable provider calls and model downloads |
-| `MATCHDAY_DB_PATH` | Source-specific file in `var/` | Database location; source marker prevents mixing |
-| `MATCHDAY_MODEL_CACHE` | `.cache/models/` | Reusable model assets |
-| `MATCHDAY_SEASON` | `2024/2025` | Scouting season; bundled demo requires this season |
-| `MATCHDAY_COMPETITIONS` | `PL` | Comma-separated provider codes |
-| `MATCHDAY_POLL_SECONDS` | `0` | Disabled, or at least 60 seconds |
-| `MATCHDAY_MODEL_THREADS` | `2` | CPU threads, 1–32 |
-
-`python app.py --port 8080` changes the port. `--no-bootstrap` serves existing data without starting a sync job. The service binds to loopback and supports one local worker. Public hosting and authentication need a separate deployment design.
+The supplied `MatchdayDB.patch` is a complete-source patch against the original README-only repository. If you already installed version 0.1, use the complete archive to update the source rather than applying that baseline patch.
 
 ## HTTP API
 
-The complete local schema is [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json).
-
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /search?q=press-resistant%20midfielder&position=DM&top_k=5` | Filtered semantic search |
-| `GET /similar/Rodri?top_k=5` | Stylistic twins |
-| `GET /similar/Rodri?ranking=hybrid` | Semantic and statistical comparison |
-| `GET /players?limit=12&offset=0` | Paginated profiles |
-| `GET /options` | Complete player selector and filters |
-| `GET /fixtures` | Stored fixture snapshots |
-| `GET /health` | Model/index readiness and latest job |
-| `POST /sync` | Start a job with JSON body `{}` |
-| `GET /sync/{run_id}` | Inspect the returned job ID |
+| `GET /players?q=Saka&team=Arsenal&sort_by=age&order=asc` | Literal player search, team filtering and sorting |
+| `GET /players?league=PL&limit=12&offset=12` | Catalogue pagination |
+| `GET /search?q=press-resistant%20midfielder&top_k=5` | Semantic search with scalar filters |
+| `GET /similar/Rodri?top_k=5` | Player twins |
+| `GET /teams/1/needs?max_age=25` | Team audit; use an ID from `/options` |
+| `GET /options` | Loaded players, teams, leagues and filter options |
+| `GET /health` | Coverage, provenance, timestamps and latest job |
+| `GET /fixtures` | Nearest stored fixture snapshots |
+| `POST /data/connect` | Validate a provider key, switch isolated dataset, start synchronization |
+| `POST /sync` | Start a synchronization with JSON `{}` |
+| `GET /sync/{run_id}` | Inspect a returned job ID |
+| `GET /openapi.json` | Full request/response schema |
 
-```bash
-curl --get http://localhost:8000/search --data-urlencode 'q=Press-resistant defensive midfielder' --data-urlencode 'position=DM' --data-urlencode 'max_age=28'
-curl 'http://localhost:8000/similar/Rodri?top_k=5'
-curl -X POST http://localhost:8000/sync -H 'Content-Type: application/json' -d '{"index_only":true}'
-```
-
-Semantic bars show `100 × max(0, cosine similarity)`. Hybrid twins combine 75% normalized semantic similarity and 25% normalized statistical similarity. Scores are descriptive, not probabilities or player quality ratings. Unknown metrics remain unavailable. See [Architecture.md](Architecture.md) for feature coverage and error contracts.
-
-## Development
+## Development and verification
 
 ```bash
 python -m pip install -r requirements-dev.txt
@@ -152,34 +182,18 @@ python -m ruff check .
 python -m ruff format --check .
 ```
 
-After preparing the model, include the actual CPU/offline integration test on macOS/Linux:
+After downloading the model, set `MATCHDAY_TEST_MODEL=1` to include the CPU integration test. It blocks network sockets and checks real embeddings, tactical search, twins and repeat indexing. Test doubles are confined to tests; production never substitutes artificial vectors.
 
-```bash
-MATCHDAY_TEST_MODEL=1 python -m pytest -q
-```
-
-PowerShell equivalent:
-
-```powershell
-$env:MATCHDAY_TEST_MODEL = "1"
-python -m pytest -q
-```
-
-That test blocks socket connections and verifies indexing, tactical search, twins, and repeat indexing. Unit tests use an explicit test encoder only for isolation. `requirements-tested-py312.txt` records the exact Linux/Python 3.12 verification environment; use the main requirements file on other versions.
-
-Provider behaviour is checked with deterministic HTTP mocks. Real account coverage, other desktop systems, broad football relevance, and larger-catalogue performance remain the release gates in [Phases.md](Phases.md). Executed evidence is recorded in [Memory.md](Memory.md).
+Provider tests use deterministic HTTP responses to validate pagination, current seasons, transfer handling, quotas, migration and missing metrics. No paid account or current live provider dataset was supplied during implementation. Live-account entitlement verification remains an explicit release gate. See [Memory.md](Memory.md) for executed checks and [Phases.md](Phases.md) for remaining work.
 
 ## Project documents
 
-| Document | Contents |
-| --- | --- |
-| [PRD.md](PRD.md) | Users, requirements, scope, acceptance |
-| [Architecture.md](Architecture.md) | Flow, files, schema, model, endpoints, decisions |
-| [Rules.md](Rules.md) | Contribution boundaries and error procedures |
-| [Phases.md](Phases.md) | Completed stages and release work |
-| [Design.md](Design.md) | Palette, typography, components, accessibility |
-| [Memory.md](Memory.md) | Compact contributor handoff and verification history |
+[PRD.md](PRD.md) · [Architecture.md](Architecture.md) · [Rules.md](Rules.md) · [Phases.md](Phases.md) · [Design.md](Design.md) · [Memory.md](Memory.md)
 
-## Attribution and licence
+## Ownership and sources
 
-Code and original synthetic content use the [MIT licence](LICENSE). Model artifacts have their own licence; consult the [MiniLM model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2). Provider data and club identities remain subject to their own terms. This repository does not redistribute provider datasets, model binaries, keys, or databases.
+Created by **Aagam Shah (AagamS06)**. [GitHub profile](https://github.com/AagamS06) · [Project repository](https://github.com/AagamS06/MatchdayDB).
+
+Source code and original synthetic content use the [MIT licence](LICENSE). Provider data, club identities and model artifacts retain their own terms. The project does not distribute keys, live provider datasets, database files or model binaries.
+
+Provider integration references: [API-Football documentation](https://www.api-football.com/documentation-v3), [complete provider guide](https://www.api-football.com/news/post/how-to-get-started-with-api-football-the-complete-beginners-guide), [player pagination](https://www.api-football.com/news/post/how-to-get-all-teams-and-players-from-a-league-id), [football-data.org coverage](https://www.football-data.org/coverage), [pricing and entitlements](https://www.football-data.org/pricing), [MiniLM model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2).

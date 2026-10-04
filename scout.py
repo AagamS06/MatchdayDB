@@ -48,6 +48,9 @@ def public_player(row: dict[str, Any], as_of: date, indexed: bool = False) -> di
         "matches_played",
         "minutes_played",
         "pass_accuracy",
+        "rating",
+        "rating_source",
+        "stats_updated_at",
     )
     result = {key: row.get(key) for key in keys}
     result.update(

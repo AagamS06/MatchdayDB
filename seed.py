@@ -580,6 +580,10 @@ def seed_database(database: Database) -> dict[str, object]:
                     progressive_passes=round(totals[5]),
                     tackles_won=round(totals[6]),
                     pass_accuracy=round(min(97, values[7] + rng.uniform(-3, 3)), 1),
+                    rating=round(rng.uniform(6.1, 8.8), 2),
+                    rating_source="Synthetic demo rating",
+                    stats_updated_at="2025-06-01T00:00:00Z",
+                    stats_team_id=team_id,
                 ),
             )
             for alias in {name, name.split()[-1]}:

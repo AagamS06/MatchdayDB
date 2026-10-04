@@ -6,7 +6,7 @@ import unicodedata
 from datetime import date, datetime, UTC
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator, model_validator
 
 from config import POSITIONS
 
@@ -19,7 +19,8 @@ def utc_now() -> str:
 
 
 def name_key(value: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+    normalized = unicodedata.normalize("NFKD", value).casefold()
+    return " ".join("".join(c for c in normalized if not unicodedata.combining(c)).split())
 
 
 class Record(BaseModel):
@@ -72,9 +73,15 @@ class PlayerStats(Record):
     progressive_passes: Count | None = None
     tackles_won: Count | None = None
     pass_accuracy: float | None = Field(default=None, ge=0, le=100, allow_inf_nan=False)
+    rating: float | None = Field(default=None, ge=0, le=10, allow_inf_nan=False)
+    rating_source: str | None = Field(default=None, max_length=100)
+    stats_updated_at: str | None = None
+    stats_team_id: int | None = Field(default=None, gt=0)
 
 
 class Filters(Record):
+    q: str | None = Field(default=None, max_length=200)
+    team: str | None = Field(default=None, max_length=200)
     max_age: int | None = Field(default=None, ge=14, le=60)
     position: str | None = None
     nationality: str | None = Field(default=None, max_length=100)
@@ -128,3 +135,21 @@ class Fixture(Record):
 
 
 Ranking = Literal["semantic", "hybrid"]
+SortField = Literal[
+    "name", "age", "position", "rating", "team", "goals", "assists", "minutes_played", "updated_at"
+]
+SortOrder = Literal["asc", "desc"]
+
+
+class ConnectRequest(Record):
+    provider: Literal["football-data", "api-football", "demo"]
+    api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
+
+    @model_validator(mode="after")
+    def require_key(self) -> ConnectRequest:
+        key = self.api_key.get_secret_value().strip()
+        if self.provider != "demo" and (
+            not 8 <= len(key) <= 256 or not key.isascii() or any(c.isspace() for c in key)
+        ):
+            raise ValueError("Enter a valid provider key (8–256 ASCII characters without spaces).")
+        return self

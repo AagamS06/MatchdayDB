@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS players (
     market_value INTEGER CHECK (market_value >= 0),
     tactical_bio TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL CHECK (source IN ('demo', 'api')),
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0,1))
 );
 CREATE TABLE IF NOT EXISTS player_aliases (
     player_id INTEGER NOT NULL REFERENCES players(player_id) ON DELETE CASCADE,
@@ -46,6 +47,10 @@ CREATE TABLE IF NOT EXISTS player_stats (
     progressive_passes INTEGER CHECK (progressive_passes >= 0),
     tackles_won INTEGER CHECK (tackles_won >= 0),
     pass_accuracy REAL CHECK (pass_accuracy BETWEEN 0 AND 100),
+    rating REAL CHECK (rating BETWEEN 0 AND 10),
+    rating_source TEXT,
+    stats_updated_at TEXT,
+    stats_team_id INTEGER REFERENCES teams(team_id),
     UNIQUE (player_id, season)
 );
 CREATE TABLE IF NOT EXISTS player_embeddings (
@@ -101,6 +106,24 @@ CREATE TABLE IF NOT EXISTS api_requests (
     request_id INTEGER PRIMARY KEY,
     started_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS league_status (
+    code TEXT PRIMARY KEY,
+    season TEXT NOT NULL,
+    state TEXT NOT NULL,
+    expected_teams INTEGER NOT NULL DEFAULT 0,
+    checked_at TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS squad_sync (
+    team_id INTEGER PRIMARY KEY REFERENCES teams(team_id) ON DELETE CASCADE,
+    season TEXT NOT NULL,
+    synced_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS provider_cache (
+    cache_key TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    fetched_at TEXT NOT NULL
+);
 CREATE INDEX IF NOT EXISTS idx_players_name ON players(name_key);
 CREATE INDEX IF NOT EXISTS idx_players_position ON players(position);
 CREATE INDEX IF NOT EXISTS idx_players_birth ON players(date_of_birth);
@@ -110,4 +133,4 @@ CREATE INDEX IF NOT EXISTS idx_aliases_key ON player_aliases(alias_key);
 CREATE INDEX IF NOT EXISTS idx_fixtures_kickoff ON fixtures(kickoff);
 CREATE INDEX IF NOT EXISTS idx_runs_started ON sync_runs(started_at);
 CREATE INDEX IF NOT EXISTS idx_requests_time ON api_requests(started_at);
-INSERT INTO app_meta(key, value) VALUES ('schema_version', '1') ON CONFLICT(key) DO NOTHING;
+INSERT INTO app_meta(key, value) VALUES ('schema_version', '2') ON CONFLICT(key) DO NOTHING;

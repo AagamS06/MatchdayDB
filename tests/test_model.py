@@ -30,7 +30,7 @@ def test_actual_cpu_model_without_network(tmp_path: Path, monkeypatch: pytest.Mo
     settings = Settings(
         db_path=tmp_path / "offline.sqlite3", model_cache=ROOT / ".cache" / "models", offline=True
     )
-    database = Database(settings.db_path, settings.source, settings.season)
+    database = Database(settings.db_path, settings.source, settings.effective_season)
     database.initialize()
     seed_database(database)
     engine = LocalEmbedder(settings)
