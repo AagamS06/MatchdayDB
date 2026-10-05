@@ -77,6 +77,15 @@ Unknown metrics stay null and display as a dash. Tackles are not relabelled as t
 
 The local database records when it fetched a value, not a guarantee of the provider's own update latency. Sparse statistical profiles reduce the precision of natural-language and twin matching. Similarity is separate from the provider's 0–10 performance rating.
 
+### If a provider is unreachable
+
+MatchdayDB depends on a single external provider for current data at any one time, and that provider can be rate-limited, down, or reject a key. Two things limit the impact:
+
+- **Switching never loses what is already running.** Each provider gets its own SQLite file (`matchdaydb-api-football.sqlite3`, `matchdaydb-football-data.sqlite3`), and connecting to a new one is all-or-nothing: the key is verified against the provider first, and the dashboard only switches over after that check succeeds. A rejected key or an outage on the *new* provider leaves whatever was already serving (a working connection, or the demo) completely untouched — nothing is torn down until the replacement is confirmed working.
+- **The offline demo dataset is always available as a fallback.** If both live providers are unreachable, selecting **Synthetic demo** in Data & connection needs no key and no network, so the dashboard is never left with nothing to show.
+
+If API-Football specifically returns `404 Not Found` when connecting, it almost always means the key was issued through the RapidAPI marketplace (`api-football-v1.p.rapidapi.com`) rather than the direct host this app calls (`v3.football.api-sports.io`). Get a key at [dashboard.api-football.com](https://dashboard.api-football.com/register) directly, not via RapidAPI.
+
 ## Keep a connection across server restarts
 
 The simplest option is to export the key before starting the app. In PowerShell:

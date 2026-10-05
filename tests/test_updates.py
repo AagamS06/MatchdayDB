@@ -354,6 +354,45 @@ def test_connect_validates_key_and_keeps_it_out_of_responses(
         assert "test-key-secret" not in str(connection.execute("SELECT * FROM app_meta").fetchall())
 
 
+def test_failed_connect_leaves_the_active_provider_serving(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A rejected or unreachable new provider must never disturb what is already running.
+
+    This is the project's real mitigation for depending on a single external data
+    provider: switching providers is all-or-nothing, so a bad key or an outage on the
+    *new* provider can never take down the one already serving players.
+    """
+    settings = Settings(db_path=tmp_path / "demo.sqlite3")
+    seed_db = Database(settings.db_path, "demo", settings.effective_season, "demo")
+    seed_db.initialize()
+    seed_database(seed_db)
+
+    class RejectingVerifier:
+        def __init__(self, config, database, stop):
+            pass
+
+        def get(self, path):
+            raise MatchdayError("PROVIDER_AUTH", "The provider denied this request.", 502)
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(app_module, "FootballClient", RejectingVerifier)
+    with TestClient(create_app(settings, bootstrap=False, embedder=TestEncoder())) as client:
+        before = client.get("/health").json()
+        assert before["synthetic"] and before["players"] > 0
+
+        failed = client.post("/data/connect", json={"provider": "api-football", "api_key": "a-bad-key-value"})
+        assert failed.status_code == 502
+        assert failed.json()["error"]["code"] == "PROVIDER_AUTH"
+
+        after = client.get("/health").json()
+        assert after["synthetic"] and after["provider"] == "demo"
+        assert after["players"] == before["players"]
+        assert client.get("/players?limit=1").status_code == 200
+
+
 def test_quota_resumption_prioritizes_unfinished_leagues(tmp_path: Path) -> None:
     from api_football import league_refresh_order
 
