@@ -215,7 +215,7 @@ function renderHealth(health) {
   state.health = health;
   const running = health.last_sync?.state === "running";
   const coverage = Array.isArray(health.coverage) ? health.coverage : [];
-  $("source-badge").textContent = health.synthetic ? "Demo dataset" : health.provider === "api-football" ? "API-Football" : "football-data.org";
+  $("source-badge").textContent = health.synthetic ? "Demo dataset" : "football-data.org";
   $("catalogue-count").textContent = `${number(health.players)} players · ${number(health.teams)} teams`;
   const seasons = [...new Set(coverage.map((league) => league.season))]; $("season-label").textContent = `${health.synthetic ? "Demo " : "Season "}${seasons.join(", ")}`;
   $("data-notice-text").textContent = health.synthetic ? "You're viewing a 60-player historical demo. Connect live data for current squads and stats across all five leagues." : running ? "Updating the catalogue. Imported players remain available while synchronization runs." : health.stats_stale ? "Some statistics are older than the refresh window. Review coverage and refresh your data." : coverage.some((league) => league.state !== "ready") ? "League coverage is incomplete. Check the data panel for quota, access or synchronization details." : "Current-season catalogue loaded. See Data & connection for coverage and refresh times.";
@@ -230,6 +230,7 @@ function renderHealth(health) {
   const report = health.last_sync?.report; const failures = (report?.resources || []).filter((item) => item.state === "failed");
   feedback("sync-feedback", running ? `Synchronization is ${report?.stage || "running"}. Full league imports can take several minutes.` : report?.error?.message || report?.index_error?.message || failures.map((item) => `${item.resource}: ${item.message || item.code}`).join(" "), Boolean(report?.error || failures.length || report?.index_error));
   $("coverage-table").replaceChildren(...coverage.map((league) => { const row = element("tr"); row.title = league.message; for (const value of [league.name, league.season, `${league.squads_loaded}/${league.expected_teams || "—"}`, number(league.players), number(league.players_with_stats), league.state]) row.append(element("td", "", value)); return row; }));
+  if (health.synthetic && !keyPromptDismissed && !$("key-prompt-dialog").open) $("key-prompt-dialog").showModal();
 }
 async function refresh() {
   if (state.refreshing) return;
@@ -242,6 +243,7 @@ async function refresh() {
   finally { state.refreshing = false; }
 }
 $("sync-button").addEventListener("click", async () => { $("sync-button").disabled = true; try { await api("/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_squads: true }) }); await refresh(); } catch (error) { feedback("sync-feedback", error.message, true); $("sync-button").disabled = false; } });
+function connectFeedbackText(result) { return result.key_storage === "remembered_in_local_env_file" ? "Connected. The import is running. The key was saved to this project's local .env file so it reconnects automatically next time." : "Connected. The import is running. The API key is held only for this server session."; }
 $("provider").addEventListener("change", () => { const demo = $("provider").value === "demo"; $("key-label").classList.toggle("hidden", demo); $("remember-key").closest("label").classList.toggle("hidden", demo); $("api-key").required = !demo; $("api-key").value = ""; });
 $("connect-form").addEventListener("submit", async (event) => {
   event.preventDefault(); $("connect-button").disabled = true; feedback("connect-feedback", "Validating the connection and starting the import.");
@@ -249,12 +251,28 @@ $("connect-form").addEventListener("submit", async (event) => {
   try {
     const result = await api("/data/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: $("provider").value, api_key: secret, remember }) });
     secret = ""; state.signature = ""; state.offset = 0; $("query").value = ""; $("team-filter").value = ""; $("twins").replaceChildren(); $("team-results").replaceChildren();
-    const remembered = result.key_storage === "remembered_in_local_env_file";
-    feedback("connect-feedback", remembered ? "Connected. The import is running. The key was saved to this project's local .env file so it reconnects automatically next time." : "Connected. The import is running. The API key is held only for this server session."); await refresh();
+    feedback("connect-feedback", connectFeedbackText(result)); await refresh();
   } catch (error) { feedback("connect-feedback", error.message, true); $("connect-button").disabled = false; }
   finally { secret = ""; }
 });
-window.addEventListener("pagehide", () => { $("api-key").value = ""; for (const controller of state.controllers.values()) controller.abort(); });
+
+// On first load, if there's no live connection yet, ask for a football-data.org key
+// right away instead of making the person find the Data & connection tab themselves.
+let keyPromptDismissed = false;
+try { keyPromptDismissed = sessionStorage.getItem("matchday-key-prompt-dismissed") === "1"; } catch { keyPromptDismissed = false; }
+function dismissKeyPrompt() { keyPromptDismissed = true; try { sessionStorage.setItem("matchday-key-prompt-dismissed", "1"); } catch { /* Best-effort in private browsing. */ } $("key-prompt-dialog").close(); }
+$("key-prompt-dismiss").addEventListener("click", dismissKeyPrompt);
+$("key-prompt-skip").addEventListener("click", dismissKeyPrompt);
+$("key-prompt-form").addEventListener("submit", async (event) => {
+  event.preventDefault(); $("key-prompt-connect").disabled = true; feedback("key-prompt-feedback", "Validating the connection and starting the import.");
+  let secret = $("key-prompt-key").value.trim(); const remember = $("key-prompt-remember").checked; $("key-prompt-key").value = "";
+  try {
+    const result = await api("/data/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: "football-data", api_key: secret, remember }) });
+    secret = ""; state.signature = ""; dismissKeyPrompt(); await refresh();
+  } catch (error) { feedback("key-prompt-feedback", error.message, true); $("key-prompt-connect").disabled = false; }
+  finally { secret = ""; }
+});
+window.addEventListener("pagehide", () => { $("api-key").value = ""; $("key-prompt-key").value = ""; for (const controller of state.controllers.values()) controller.abort(); });
 restoreFromURL();
 void refresh();
 setInterval(() => { if (!document.hidden) void refresh(); }, 5000);

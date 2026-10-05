@@ -44,7 +44,6 @@ The model loads on demand. Background synchronization runs with a process guard 
 | `schema.sql` | Complete schema version 2 |
 | `database.py` | Migration, transactions, data provenance, memberships, vectors and candidate SQL |
 | `ingestion.py` | Quota/retry client, resume cache and football-data.org adapter |
-| `api_football.py` | API-Football current squads, all statistics pages and fixture adapter |
 | `seed.py` | Deterministic historical synthetic dataset |
 | `embeddings.py` | Tactical prose, model fingerprinting, batched indexing and stale checks |
 | `scout.py` | Name resolution, semantic search, twins, public profiles and statistical ranking |
@@ -70,13 +69,13 @@ Stats are selected for each team's recorded league season. A known `stats_team_i
 
 ## Ingestion contracts
 
-API-Football current-season metadata is selected explicitly. Team and current squad endpoints establish membership. The player endpoint is consumed until `paging.current == paging.total`; no fixed player count truncates import. Stats match current player ID, club, league and season. Duplicate matching blocks and inconsistent pagination fail visibly.
+football-data.org discovers the current season from the catalogue/resource. It refreshes squad membership, ingests supplied scorer entries and polls fixtures. Scorer-feed absence is not a zero statistic. Unsupported advanced fields (ratings, xG, xA, minutes, tackles, pass accuracy, progressive actions) remain null rather than estimated.
 
-Incomplete API-Football runs retain successful response pages for up to 48 hours. The next run prioritizes unfinished and oldest league catalogues to avoid repeatedly spending limited quota on the first completed league. Each league's completed catalogue clears its temporary cache. Normal catalogue refresh is daily by default; a forced refresh bypasses the completed-catalogue timestamp. Quota responses defer later attempts. Fixture requests use a short date window, and observed payload revisions are deduplicated.
+Resumable pages from an incomplete run are cached for up to 48 hours, so a retried import does not re-spend quota on already-completed pages.
 
-football-data.org discovers the current season from the catalogue/resource. It refreshes squad membership, ingests supplied scorer entries and polls fixtures. Scorer-feed absence is not a zero statistic. Unsupported advanced fields remain null.
+The client counts retries toward the local quota. The default ceiling is ten request starts per rolling minute. Attempts have a 120-second scheduling budget, five-attempt maximum, jittered exponential delays, Retry-After support and bounded connect/read timeouts. Permanent authentication failures are not retried as transient errors.
 
-Both clients count retries toward the local quota. The default ceiling is ten request starts per rolling minute. Attempts have a 120-second scheduling budget, five-attempt maximum, jittered exponential delays, Retry-After support and bounded connect/read timeouts. Permanent authentication and entitlement failures are not retried as transient errors. API-Football HTTP-200 error envelopes are checked explicitly.
+API-Football support (a second live provider) was implemented and later removed at the user's request, to keep a single, simpler provider integration.
 
 ## Retrieval and numerical semantics
 

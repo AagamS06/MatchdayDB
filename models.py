@@ -142,7 +142,7 @@ SortOrder = Literal["asc", "desc"]
 
 
 class ConnectRequest(Record):
-    provider: Literal["football-data", "api-football", "demo"]
+    provider: Literal["football-data", "demo"]
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
     remember: bool = True
 

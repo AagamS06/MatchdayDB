@@ -11,9 +11,9 @@ Browse players by name, team and league. Compare playing styles, inspect provide
 - Sorting by name, age, position, rating, team, goals, assists, minutes and update time. Unknown values always appear last.
 - Natural-language scouting and a searchable Player Twin picker with five ranked matches.
 - A team scout that reports supported depth, succession and statistical concerns, explains its evidence, and suggests players from other clubs.
-- API-Football as the primary live-data option. football-data.org remains available.
+- football-data.org as the live-data provider, with an offline synthetic demo always available as a fallback.
 - Current-season discovery and all available player pages across the Premier League, La Liga, Bundesliga, Serie A and Ligue 1.
-- Inspectable coverage, refresh times, resumable API-Football imports, and separate databases for each provider.
+- Inspectable coverage, refresh times, and resumable imports.
 
 ## Start locally
 
@@ -44,47 +44,44 @@ python app.py
 
 Open [http://localhost:8000](http://localhost:8000). The first semantic-model download needs internet. Browsing, filters, sorting and team audits remain available while the model prepares.
 
+If you haven't connected a live key yet, a dialog asks for your football-data.org key as soon as the page opens — see the next section. Choose **Use demo data instead** to dismiss it and browse the 60-player synthetic demo for that session.
+
 ## Connect current data
 
-1. Obtain your own key from the [API-Football dashboard](https://dashboard.api-football.com/register).
-2. Open **Data & connection** in MatchdayDB.
-3. Select **API-Football**, enter the key and choose **Connect & sync**.
-4. Watch the five-league coverage table. Players appear as squads and statistics are imported.
+1. Obtain your own key from [football-data.org](https://www.football-data.org/client/register).
+2. Enter it in the dialog that opens automatically, or open **Data & connection** in MatchdayDB and choose **Connect & sync** there.
+3. Watch the five-league coverage table. Players appear as squads are imported.
 
 By default, once a key is verified, the connection form also saves it to a local `.env` file next to the app (**Remember this key on this computer** is checked by default). That file never leaves this computer, is never written to a database or the browser, and is already excluded from git (`.gitignore`). Restarting the server reconnects automatically using that file — nothing else to export or configure. Uncheck the box if you'd rather keep the key only in the running server's memory, which is cleared the moment the server stops.
 
-A key belongs to your provider account. Changing a key alone does not grant a different subscription's access. Check current-season access and request quotas in that account. A complete five-league catalogue can require hundreds of calls and exceed a free daily quota. Completed API-Football pages from an incomplete run are cached for 48 hours. Resume after the quota resets. Unfinished and oldest league catalogues are processed first, so completed leagues do not continually consume the next day’s quota. A successful catalogue import clears its temporary pages so the next refresh fetches new records.
+A key belongs to your football-data.org account. Check current-season access and request quotas in that account. A complete five-league catalogue can require many calls and may exceed a free-tier daily quota. Completed pages from an incomplete run are cached for 48 hours; resume after the quota resets.
 
 Live ingestion has no 60-player cap. The default competitions are:
 
-| League | Code | API-Football ID |
-| --- | --- | --- |
-| English Premier League | `PL` | `39` |
-| La Liga | `PD` | `140` |
-| Bundesliga | `BL1` | `78` |
-| Serie A | `SA` | `135` |
-| Ligue 1 | `FL1` | `61` |
+| League | Code |
+| --- | --- |
+| English Premier League | `PL` |
+| La Liga | `PD` |
+| Bundesliga | `BL1` |
+| Serie A | `SA` |
+| Ligue 1 | `FL1` |
 
 ### What each dataset contains
 
 | Dataset | Available data | Limits |
 | --- | --- | --- |
-| API-Football | Current squads; supported season appearances, minutes, goals, assists and provider ratings; fixtures | Availability and current-season access depend on the account. These adapters do not supply xG, xA or progressive actions. |
-| football-data.org | Entitled current squads, fixtures and scorer entries | Squad/scorer access depends on the plan. Scorer entries are a partial statistics feed. No per-player minutes or ratings are inferred. |
+| football-data.org | Entitled current squads, fixtures and competition top-scorer goals/assists | Squad/scorer access depends on the plan. Scorer entries are a partial statistics feed. No ratings, xG, xA, minutes, tackles, pass accuracy or progressive actions are supplied or inferred. |
 | Demo | 60 real-world player names, illustrative 2024/2025 club associations, synthetic metrics, ratings, bios and fixtures | Historical demonstration only. It is not a current squad database and does not become current when refreshed. |
 
-Unknown metrics stay null and display as a dash. Tackles are not relabelled as tackles won, and ordinary passes are not relabelled as progressive passes. API-Football season statistics are selected for the player's current registered club and league. Previous-club season totals cannot overwrite current-club statistics. Players without statistical appearances may initially have an unknown date of birth or nationality.
+Unknown metrics stay null and display as a dash; nothing is estimated from other fields. Players without statistical appearances may initially have an unknown date of birth or nationality.
 
-The local database records when it fetched a value, not a guarantee of the provider's own update latency. Sparse statistical profiles reduce the precision of natural-language and twin matching. Similarity is separate from the provider's 0–10 performance rating.
+The local database records when it fetched a value, not a guarantee of the provider's own update latency. Sparse statistical profiles reduce the precision of natural-language and twin matching. The demo's 0–10 rating is illustrative only; live mode has no rating.
 
-### If a provider is unreachable
+### If football-data.org is unreachable
 
-MatchdayDB depends on a single external provider for current data at any one time, and that provider can be rate-limited, down, or reject a key. Two things limit the impact:
+MatchdayDB depends on a single external provider for current data, and that provider can be rate-limited, down, or reject a key. Connecting is all-or-nothing: the key is verified against the provider first, and the dashboard only switches over after that check succeeds, so a rejected key or an outage leaves whatever was already serving (a working connection, or the demo) completely untouched. The offline demo dataset is always available as a fallback — selecting **Synthetic demo** in Data & connection (or **Use demo data instead** on the connect dialog) needs no key and no network, so the dashboard is never left with nothing to show.
 
-- **Switching never loses what is already running.** Each provider gets its own SQLite file (`matchdaydb-api-football.sqlite3`, `matchdaydb-football-data.sqlite3`), and connecting to a new one is all-or-nothing: the key is verified against the provider first, and the dashboard only switches over after that check succeeds. A rejected key or an outage on the *new* provider leaves whatever was already serving (a working connection, or the demo) completely untouched — nothing is torn down until the replacement is confirmed working.
-- **The offline demo dataset is always available as a fallback.** If both live providers are unreachable, selecting **Synthetic demo** in Data & connection needs no key and no network, so the dashboard is never left with nothing to show.
-
-If API-Football specifically returns `404 Not Found` when connecting, it almost always means the key was issued through the RapidAPI marketplace (`api-football-v1.p.rapidapi.com`) rather than the direct host this app calls (`v3.football.api-sports.io`). Get a key at [dashboard.api-football.com](https://dashboard.api-football.com/register) directly, not via RapidAPI.
+A `404 Not Found` when connecting almost always means the key itself has a typo or extra whitespace, since a bad or expired token usually returns `403` instead. Check the token at [football-data.org/client/register](https://www.football-data.org/client/register).
 
 ## Keep a connection across server restarts
 
@@ -95,9 +92,8 @@ If you'd rather not have the key written to disk at all, uncheck that box before
 Manual alternatives, if you'd rather manage the key yourself instead of using `.env`: export it before starting the app. In PowerShell:
 
 ```powershell
-$secret = Read-Host "API-Football key" -AsSecureString
-$env:API_FOOTBALL_KEY = [System.Net.NetworkCredential]::new("", $secret).Password
-$env:MATCHDAY_PROVIDER = "api-football"
+$secret = Read-Host "football-data.org key" -AsSecureString
+$env:FOOTBALL_API_KEY = [System.Net.NetworkCredential]::new("", $secret).Password
 $env:MATCHDAY_SOURCE = "api"
 python app.py
 ```
@@ -105,14 +101,13 @@ python app.py
 In Bash:
 
 ```bash
-read -rsp 'API-Football key: ' API_FOOTBALL_KEY
-export API_FOOTBALL_KEY
-export MATCHDAY_PROVIDER=api-football
+read -rsp 'football-data.org key: ' FOOTBALL_API_KEY
+export FOOTBALL_API_KEY
 export MATCHDAY_SOURCE=api
 python app.py
 ```
 
-The legacy adapter reads `FOOTBALL_API_KEY` when `MATCHDAY_PROVIDER=football-data`. Neither adapter silently substitutes demo records if authentication fails.
+The adapter never silently substitutes demo records if authentication fails.
 
 ## Search and team planning
 
@@ -135,11 +130,10 @@ Settings come from the environment. `.env.example` documents them; it is not loa
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `API_FOOTBALL_KEY` | Absent | Primary provider credential |
-| `FOOTBALL_API_KEY` | Absent | Legacy provider credential |
-| `MATCHDAY_PROVIDER` | `api-football` | Uses `football-data` automatically if only its legacy key is present |
-| `MATCHDAY_SOURCE` | `auto` | Demo without the selected provider's key, API with one |
-| `MATCHDAY_SEASON` | `auto` | Discover current season from each provider league; explicit year/season supported |
+| `FOOTBALL_API_KEY` | Absent | football-data.org provider credential |
+| `MATCHDAY_PROVIDER` | `football-data` | Only `football-data` is supported |
+| `MATCHDAY_SOURCE` | `auto` | Demo without a key, API with one |
+| `MATCHDAY_SEASON` | `auto` | Discover current season from the provider; explicit year/season supported |
 | `MATCHDAY_COMPETITIONS` | `PL,PD,BL1,SA,FL1` | League scope |
 | `MATCHDAY_REFRESH_HOURS` | `24` | Normal squad/stat refresh interval, 1–168 |
 | `MATCHDAY_POLL_SECONDS` | `0` | Disabled, or at least 60 seconds |
@@ -149,7 +143,7 @@ Settings come from the environment. `.env.example` documents them; it is not loa
 | `MATCHDAY_MODEL_CACHE` | `.cache/models/` | Local model assets |
 | `MATCHDAY_MODEL_THREADS` | `2` | CPU threads, 1–32 |
 
-**Refresh data** forces a squad/stat refresh; cached pages from an incomplete API-Football run remain reusable. Polling checks fixtures while respecting the normal catalogue refresh interval. “Current” means the provider's latest available state, not a guaranteed instant push feed.
+**Refresh data** forces a squad/stat refresh; cached pages from an incomplete run remain reusable. Polling checks fixtures while respecting the normal catalogue refresh interval. “Current” means the provider's latest available state, not a guaranteed instant push feed.
 
 To prepare offline use:
 
@@ -209,4 +203,4 @@ Created by **Aagam Shah (AagamS06)**. [GitHub profile](https://github.com/AagamS
 
 Source code and original synthetic content use the [MIT licence](LICENSE). Provider data, club identities and model artifacts retain their own terms. The project does not distribute keys, live provider datasets, database files or model binaries.
 
-Provider integration references: [API-Football documentation](https://www.api-football.com/documentation-v3), [complete provider guide](https://www.api-football.com/news/post/how-to-get-started-with-api-football-the-complete-beginners-guide), [player pagination](https://www.api-football.com/news/post/how-to-get-all-teams-and-players-from-a-league-id), [football-data.org coverage](https://www.football-data.org/coverage), [pricing and entitlements](https://www.football-data.org/pricing), [MiniLM model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2).
+Provider integration references: [football-data.org coverage](https://www.football-data.org/coverage), [pricing and entitlements](https://www.football-data.org/pricing), [MiniLM model card](https://huggingface.co/sentence-transformers/all-MiniLM-L6-v2).

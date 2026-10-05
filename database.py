@@ -163,13 +163,6 @@ class Database:
                 raise MatchdayError(
                     "PROVIDER_MISMATCH", "Use separate databases for different providers.", 409
                 )
-            if self.source == "api" and not provider and self.provider != "football-data":
-                if connection.execute("SELECT count(*) FROM players").fetchone()[0]:
-                    raise MatchdayError(
-                        "PROVIDER_MISMATCH",
-                        "An existing provider database cannot be reused for API-Football.",
-                        409,
-                    )
             self.set_meta(connection, "provider", self.provider)
 
     @staticmethod

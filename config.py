@@ -10,11 +10,10 @@ from datetime import datetime, UTC
 
 ROOT = Path(__file__).resolve().parent
 ENV_FILE = ROOT / ".env"
-REMEMBERED_KEYS = {"api-football": "API_FOOTBALL_KEY", "football-data": "FOOTBALL_API_KEY"}
+REMEMBERED_KEYS = {"football-data": "FOOTBALL_API_KEY"}
 MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 DIMENSION = 384
 LEAGUES = {"PL": "Premier League", "PD": "La Liga", "BL1": "Bundesliga", "SA": "Serie A", "FL1": "Ligue 1"}
-API_FOOTBALL_LEAGUES = {"PL": 39, "PD": 140, "BL1": 78, "SA": 135, "FL1": 61}
 
 
 def current_season() -> str:
@@ -32,7 +31,7 @@ POSITIONS = frozenset(
 class Settings:
     source: str = "demo"
     api_key: str = field(default="", repr=False)
-    provider: str = "api-football"
+    provider: str = "football-data"
     db_path: Path = ROOT / "var" / "matchdaydb-demo.sqlite3"
     model_cache: Path = ROOT / ".cache" / "models"
     season: str = "auto"
@@ -44,8 +43,8 @@ class Settings:
     requests_per_minute: int = 10
 
     def __post_init__(self) -> None:
-        if self.provider not in {"football-data", "api-football"}:
-            raise ValueError("Provider must be football-data or api-football.")
+        if self.provider != "football-data":
+            raise ValueError("Provider must be football-data. API-Football support was removed.")
         if self.source not in {"demo", "api"}:
             raise ValueError("Source must be demo or api.")
         if self.source == "api" and not self.api_key and not self.offline:
@@ -73,13 +72,8 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> Settings:
-        provider = os.getenv(
-            "MATCHDAY_PROVIDER",
-            "football-data"
-            if os.getenv("FOOTBALL_API_KEY") and not os.getenv("API_FOOTBALL_KEY")
-            else "api-football",
-        )
-        key = os.getenv("API_FOOTBALL_KEY" if provider == "api-football" else "FOOTBALL_API_KEY", "").strip()
+        provider = os.getenv("MATCHDAY_PROVIDER", "football-data")
+        key = os.getenv("FOOTBALL_API_KEY", "").strip()
         source = os.getenv("MATCHDAY_SOURCE", "auto").strip().lower()
         if source == "auto":
             source = "api" if key else "demo"
@@ -153,7 +147,7 @@ def remember_key(provider: str, api_key: str, path: Path | None = None) -> None:
     if path is None:
         path = ENV_FILE
     if provider not in REMEMBERED_KEYS:
-        raise ValueError("Only api-football and football-data keys can be remembered.")
+        raise ValueError("Only football-data keys can be remembered.")
     updates = {
         "MATCHDAY_SOURCE": "api",
         "MATCHDAY_PROVIDER": provider,

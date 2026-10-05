@@ -19,7 +19,7 @@ A user can find a named player or browse a club, narrow the catalogue to a major
 | Sorting | Name, age, position, rating, team, goals, assists, minutes and freshness; unknowns last |
 | League coverage | PL, PD, BL1, SA and FL1 enabled by default; complete available live pages rather than a 60-player cap |
 | Current data | Provider current-season discovery; refresh action; season, source and coverage visible |
-| Provider connection | API-Football primary, football-data.org retained; local key input, memory-only credential, isolated databases |
+| Provider connection | football-data.org, with a synthetic-demo fallback; local key input, opt-in local persistence, isolated databases |
 | Semantic search | Local 384-dimensional MiniLM embeddings with compatible-index checks |
 | Twins | Searchable player selector, five nearest profiles, explicit similarity interpretation |
 | Team scout | Evidence-backed depth, succession and performance indicators; outside-club shortlists; sparse checks skipped |

@@ -6,7 +6,7 @@ Use MatchdayDB consistently. Credit Aagam Shah (AagamS06) and preserve footer li
 
 ## Data integrity
 
-- Keep demo, API-Football and football-data.org databases separate. Never merge provider IDs without an explicit identity-mapping design.
+- Keep the demo and football-data.org databases separate. Never merge provider IDs without an explicit identity-mapping design.
 - Discover live seasons from provider metadata. Never relabel a historical dataset as current.
 - Consume all provider pages. Do not impose a demonstration player limit on live ingestion.
 - Replace memberships only after a complete, valid, nonempty snapshot. Preserve data on incomplete responses.

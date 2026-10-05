@@ -101,23 +101,10 @@ class FootballClient:
         self.stop = stop
         self.database, self.provider = database, settings.provider
         self.fetched_at = utc_now()
-        self.limiter = RateLimiter(
-            database,
-            stop,
-            limit=min(10, settings.requests_per_minute)
-            if settings.provider == "football-data"
-            else settings.requests_per_minute,
-        )
+        self.limiter = RateLimiter(database, stop, limit=min(10, settings.requests_per_minute))
         self.client = httpx.Client(
-            base_url="https://api.football-data.org/v4/"
-            if settings.provider == "football-data"
-            else "https://v3.football.api-sports.io/",
-            headers={
-                "X-Auth-Token"
-                if settings.provider == "football-data"
-                else "x-apisports-key": settings.api_key,
-                "User-Agent": "MatchdayDB/0.2",
-            },
+            base_url="https://api.football-data.org/v4/",
+            headers={"X-Auth-Token": settings.api_key, "User-Agent": "MatchdayDB/0.2"},
             timeout=httpx.Timeout(20, connect=5),
             follow_redirects=False,
             transport=transport,
@@ -166,37 +153,6 @@ class FootballClient:
                         raise MatchdayError(
                             "PROVIDER_FORMAT", "Provider returned an unexpected JSON structure.", 502
                         )
-                    if self.provider == "api-football" and data.get("errors"):
-                        error_text = json.dumps(data["errors"]).lower()
-                        if any(word in error_text for word in ("limit", "quota", "requests")):
-                            now = datetime.now(UTC)
-                            midnight = (now + timedelta(days=1)).replace(
-                                hour=0, minute=0, second=1, microsecond=0
-                            )
-                            self.limiter.defer((midnight - now).total_seconds())
-                            raise MatchdayError(
-                                "PROVIDER_QUOTA",
-                                "Daily provider quota exhausted. Completed pages are saved; retry after the quota resets.",
-                                503,
-                                True,
-                            )
-                        code = (
-                            "PROVIDER_AUTH"
-                            if any(word in error_text for word in ("token", "key", "auth"))
-                            else "PROVIDER_ENTITLEMENT"
-                        )
-                        raise MatchdayError(
-                            code,
-                            "The provider denied this request. Check the key, season access, and account coverage.",
-                            502,
-                        )
-                    remaining = response.headers.get("x-ratelimit-requests-remaining")
-                    if self.provider == "api-football" and remaining == "0":
-                        now = datetime.now(UTC)
-                        midnight = (now + timedelta(days=1)).replace(
-                            hour=0, minute=0, second=1, microsecond=0
-                        )
-                        self.limiter.defer((midnight - now).total_seconds())
                     self.fetched_at = utc_now()
                     return data
                 if status not in {429, 500, 502, 503, 504}:
@@ -204,14 +160,7 @@ class FootballClient:
                         status, "PROVIDER_REQUEST"
                     )
                     message = f"Provider request returned HTTP {status}."
-                    if status == 404 and self.provider == "api-football":
-                        message = (
-                            "API-Football returned 404 Not Found for this key. This usually means the key "
-                            "was issued for the RapidAPI marketplace (api-football-v1.p.rapidapi.com) rather "
-                            "than the direct api-sports.io host this app calls. Get a key at "
-                            "dashboard.api-football.com, not via RapidAPI, or check for a typo in the key."
-                        )
-                    elif status == 404 and self.provider == "football-data":
+                    if status == 404:
                         message = (
                             "football-data.org returned 404 Not Found for this key. A bad or expired token "
                             "usually returns 403, so 404 here most often means the key itself has a typo or "
@@ -522,8 +471,4 @@ def ingest(
         return {"source": settings.source, "state": "succeeded", "ingestion": "unchanged"}
     if settings.source == "demo":
         return {**seed_database(database), "state": "succeeded"}
-    if settings.provider == "api-football":
-        from api_football import sync_api_football
-
-        return sync_api_football(settings, database, request, stop)
     return sync_provider(settings, database, request, stop)

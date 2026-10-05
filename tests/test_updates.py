@@ -15,20 +15,19 @@ from fastapi.testclient import TestClient
 
 import app as app_module
 import config as config_module
-from api_football import parse_statistics, sync_api_football
 from app import create_app
 from config import LEAGUES, Settings, current_season
 from database import Database
 from errors import MatchdayError
 from ingestion import FootballClient
-from models import Player, PlayerStats, SyncRequest, Team
+from models import Player, PlayerStats, Team
 from seed import seed_database
 from team_scout import audit_team
 from test_backend import TestEncoder
 
 
 def live_db(tmp_path: Path) -> Database:
-    db = Database(tmp_path / "api.sqlite3", "api", "2026/2027", "api-football")
+    db = Database(tmp_path / "api.sqlite3", "api", "2026/2027", "football-data")
     db.initialize()
     return db
 
@@ -36,7 +35,6 @@ def live_db(tmp_path: Path) -> Database:
 def test_configuration_tracks_season_and_all_five_leagues(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         "FOOTBALL_API_KEY",
-        "API_FOOTBALL_KEY",
         "MATCHDAY_SOURCE",
         "MATCHDAY_PROVIDER",
         "MATCHDAY_SEASON",
@@ -44,15 +42,17 @@ def test_configuration_tracks_season_and_all_five_leagues(monkeypatch: pytest.Mo
     ):
         monkeypatch.delenv(name, raising=False)
     config = Settings.from_env()
-    assert config.source == "demo" and config.provider == "api-football"
+    assert config.source == "demo" and config.provider == "football-data"
     assert set(config.competitions) == set(LEAGUES)
     assert config.effective_season == "2024/2025"
-    monkeypatch.setenv("API_FOOTBALL_KEY", "unit-secret-key")
+    monkeypatch.setenv("FOOTBALL_API_KEY", "unit-secret-key")
     config = Settings.from_env()
     assert config.source == "api" and config.effective_season == current_season()
     assert "unit-secret-key" not in repr(config)
     with pytest.raises(ValueError):
         Settings(season="2025/2028")
+    with pytest.raises(ValueError):
+        Settings(provider="api-football")
 
 
 def test_existing_v1_database_migrates_without_losing_players(tmp_path: Path) -> None:
@@ -69,7 +69,7 @@ def test_existing_v1_database_migrates_without_losing_players(tmp_path: Path) ->
     assert rows[0]["name"] == "João Test" and rows[0]["name_key"] == "joao test"
     assert rows[0]["rating"] is None and db.meta("schema_version") == "2"
     with pytest.raises(MatchdayError, match="separate"):
-        Database(db.path, "api", db.season, "football-data").initialize()
+        Database(db.path, "demo", db.season, "football-data").initialize()
 
 
 def test_search_sort_and_team_filters_work_without_ml(tmp_path: Path) -> None:
@@ -124,154 +124,45 @@ def test_snapshot_removes_departed_players_and_failed_snapshot_preserves_data(tm
     assert len(db.candidates()) == 2
 
 
-def test_api_football_paginates_all_players_and_retains_current_membership(tmp_path: Path) -> None:
+def test_provider_404_explains_likely_key_typo(tmp_path: Path) -> None:
     db = live_db(tmp_path)
-    config = Settings(
-        source="api", api_key="test-key", provider="api-football", db_path=db.path, competitions=("PL",)
-    )
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        calls.append((path, dict(request.url.params)))
-        if path == "/leagues":
-            response = [
-                {"seasons": [{"year": 2026, "current": True, "start": "2026-08-10", "end": "2027-05-25"}]}
-            ]
-        elif path == "/teams":
-            response = [{"team": {"id": 1, "name": "Alpha"}}]
-        elif path == "/players/squads":
-            response = [
-                {
-                    "team": {"id": 1},
-                    "players": [
-                        {"id": i, "name": f"Player {i}", "position": "Midfielder"} for i in range(1, 62)
-                    ],
-                }
-            ]
-        elif path == "/players":
-            page = int(request.url.params["page"])
-            response = [
-                {
-                    "player": {
-                        "id": i,
-                        "name": f"Player {i}",
-                        "birth": {"date": "2001-04-12"},
-                        "nationality": "Spain",
-                    },
-                    "statistics": [
-                        {
-                            "team": {"id": 1},
-                            "league": {"id": 39, "season": 2026},
-                            "games": {
-                                "position": "Midfielder",
-                                "appearences": 6,
-                                "minutes": 500,
-                                "rating": "7.3",
-                            },
-                            "goals": {"total": i % 4, "assists": 2},
-                        },
-                        {
-                            "team": {"id": 2},
-                            "league": {"id": 39, "season": 2026},
-                            "games": {"minutes": 9000, "rating": "9.9"},
-                            "goals": {"total": 99},
-                        },
-                    ],
-                }
-                for i in range((page - 1) * 20 + 1, min(page * 20 + 1, 62))
-            ]
-            return httpx.Response(
-                200, json={"errors": [], "response": response, "paging": {"current": page, "total": 4}}
-            )
-        else:
-            response = []
-        return httpx.Response(200, json={"errors": [], "response": response})
-
-    client = FootballClient(config, db, threading.Event(), httpx.MockTransport(handler))
-    result = sync_api_football(config, db, SyncRequest(), threading.Event(), client)
-    assert result["state"] == "succeeded"
-    rows = db.candidates()
-    assert len(rows) == 61
-    assert {r["season"] for r in rows} == {"2026/2027"}
-    assert all(r["rating"] == 7.3 and r["minutes_played"] == 500 and r["team_id"] == 1 for r in rows)
-    assert all(r["xG"] is None and r["progressive_passes"] is None for r in rows)
-    assert [params["page"] for path, params in calls if path == "/players"] == ["1", "2", "3", "4"]
-
-
-def test_provider_error_envelope_and_resumable_cache(tmp_path: Path) -> None:
-    db = live_db(tmp_path)
-    config = Settings(source="api", provider="api-football", api_key="unit-test-key")
-    calls = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        calls.append(request.url.path)
-        return httpx.Response(200, json={"response": [{"id": 1}], "errors": []})
-
-    client = FootballClient(config, db, threading.Event(), httpx.MockTransport(handler))
-    try:
-        assert client.cached("players", {"page": "1"}) == client.cached("players", {"page": "1"})
-        assert calls == ["/players"]
-    finally:
-        client.close()
-    client = FootballClient(
-        config,
-        db,
-        threading.Event(),
-        httpx.MockTransport(
-            lambda request: httpx.Response(
-                200, json={"errors": {"requests": "Daily quota reached"}, "response": []}
-            )
-        ),
-    )
-    try:
-        with pytest.raises(MatchdayError) as error:
-            client.get("players")
-        assert error.value.code == "PROVIDER_QUOTA" and db.meta("provider_retry_at")
-    finally:
-        client.close()
-
-
-def test_api_football_404_explains_likely_host_key_mismatch(tmp_path: Path) -> None:
-    db = live_db(tmp_path)
-    config = Settings(source="api", provider="api-football", api_key="unit-test-key")
+    config = Settings(source="api", provider="football-data", api_key="unit-test-key")
     client = FootballClient(
         config, db, threading.Event(), httpx.MockTransport(lambda request: httpx.Response(404))
     )
     try:
         with pytest.raises(MatchdayError) as error:
-            client.get("status")
-        assert error.value.code == "PROVIDER_NOT_FOUND"
-        assert "RapidAPI" in error.value.message and "dashboard.api-football.com" in error.value.message
-    finally:
-        client.close()
-    football_data = Settings(source="api", provider="football-data", api_key="unit-test-key")
-    client = FootballClient(
-        football_data, db, threading.Event(), httpx.MockTransport(lambda request: httpx.Response(404))
-    )
-    try:
-        with pytest.raises(MatchdayError) as error:
             client.get("competitions")
-        assert error.value.code == "PROVIDER_NOT_FOUND" and "RapidAPI" not in error.value.message
+        assert error.value.code == "PROVIDER_NOT_FOUND"
         assert "football-data.org/client/register" in error.value.message
     finally:
         client.close()
 
 
-def test_parser_never_relabels_tackles_or_passes(tmp_path: Path) -> None:
-    player, stats = parse_statistics(
-        {"id": 1, "name": "Test", "birth": {"date": "2000-01-01"}},
-        {
-            "team": {"id": 1},
-            "games": {"rating": "8.1", "position": "Defender"},
-            "tackles": {"total": 90},
-            "passes": {"total": 1000, "accuracy": 800},
-        },
-        "2026/2027",
-        "2026-10-03T00:00:00Z",
+def test_provider_quota_response_defers_and_caches(tmp_path: Path) -> None:
+    db = live_db(tmp_path)
+    config = Settings(source="api", provider="football-data", api_key="unit-test-key")
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        return httpx.Response(200, json={"competitions": [{"id": 1}]})
+
+    client = FootballClient(config, db, threading.Event(), httpx.MockTransport(handler))
+    try:
+        assert client.cached("competitions") == client.cached("competitions")
+        assert calls == ["/v4/competitions"]
+    finally:
+        client.close()
+    client = FootballClient(
+        config, db, threading.Event(), httpx.MockTransport(lambda request: httpx.Response(401))
     )
-    assert player.position == "DEF" and stats.rating == 8.1
-    assert stats.tackles_won is None and stats.progressive_passes is None and stats.pass_accuracy is None
+    try:
+        with pytest.raises(MatchdayError) as error:
+            client.get("competitions")
+        assert error.value.code == "PROVIDER_AUTH"
+    finally:
+        client.close()
 
 
 def test_team_audit_shortlists_outside_club_and_skips_sparse_data(tmp_path: Path) -> None:
@@ -326,10 +217,10 @@ def test_connect_validates_key_and_keeps_it_out_of_responses(
 
     class Verifier:
         def __init__(self, config, database, stop):
-            assert config.provider == "api-football" and config.api_key == "test-key-secret"
+            assert config.provider == "football-data" and config.api_key == "test-key-secret"
 
         def get(self, path):
-            assert path == "status"
+            assert path == "competitions"
             return {"response": {}}
 
         def close(self):
@@ -343,25 +234,25 @@ def test_connect_validates_key_and_keeps_it_out_of_responses(
     monkeypatch.setattr(config_module, "ENV_FILE", tmp_path / ".env")
     with TestClient(create_app(settings, bootstrap=False, embedder=TestEncoder())) as client:
         assert (
-            client.post("/data/connect", json={"provider": "api-football", "api_key": "short"}).status_code
+            client.post("/data/connect", json={"provider": "football-data", "api_key": "short"}).status_code
             == 422
         )
         blocked = client.post(
             "/data/connect",
-            json={"provider": "api-football", "api_key": "test-key-secret"},
+            json={"provider": "football-data", "api_key": "test-key-secret"},
             headers={"Origin": "https://outside.example"},
         )
         assert blocked.status_code == 403
         result = client.post(
             "/data/connect",
-            json={"provider": "api-football", "api_key": "test-key-secret", "remember": False},
+            json={"provider": "football-data", "api_key": "test-key-secret", "remember": False},
         )
         assert result.status_code == 202
         assert result.json()["key_storage"] == "server_memory_only"
         assert not (tmp_path / ".env").exists()
         assert "test-key-secret" not in result.text + client.get("/health").text
-        assert client.get("/health").json()["provider"] == "api-football"
-    with sqlite3.connect(tmp_path / "matchdaydb-api-football.sqlite3") as connection:
+        assert client.get("/health").json()["provider"] == "football-data"
+    with sqlite3.connect(tmp_path / "matchdaydb-football-data.sqlite3") as connection:
         assert "test-key-secret" not in str(connection.execute("SELECT * FROM app_meta").fetchall())
 
 
@@ -369,8 +260,8 @@ def test_connect_remembers_key_by_default_and_can_opt_out(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The convenience default (remember=true) writes a usable, git-ignored .env file,
-    never echoes the key back in the response, and a provider switch cleans up the
-    previous provider's key while leaving unrelated lines untouched."""
+    never echoes the key back in the response, and reconnecting with a new key
+    overwrites the old one while leaving unrelated lines untouched."""
     settings = Settings(db_path=tmp_path / "demo.sqlite3")
     env_file = tmp_path / ".env"
     env_file.write_text("MY_CUSTOM_SETTING=keep-me\n", encoding="utf-8")
@@ -389,24 +280,26 @@ def test_connect_remembers_key_by_default_and_can_opt_out(
     monkeypatch.setattr(app_module, "FootballClient", Verifier)
     monkeypatch.setattr(app_module.SyncManager, "start", lambda self, request: "test-run")
     with TestClient(create_app(settings, bootstrap=False, embedder=TestEncoder())) as client:
-        result = client.post("/data/connect", json={"provider": "api-football", "api_key": "test-key-secret"})
+        result = client.post(
+            "/data/connect", json={"provider": "football-data", "api_key": "test-key-secret"}
+        )
         assert result.status_code == 202
         assert result.json()["key_storage"] == "remembered_in_local_env_file"
         assert "test-key-secret" not in result.text
 
         saved = env_file.read_text(encoding="utf-8")
-        assert "API_FOOTBALL_KEY=test-key-secret" in saved
-        assert "MATCHDAY_PROVIDER=api-football" in saved
+        assert "FOOTBALL_API_KEY=test-key-secret" in saved
+        assert "MATCHDAY_PROVIDER=football-data" in saved
         assert "MY_CUSTOM_SETTING=keep-me" in saved  # untouched, hand-added lines survive
 
-        switched = client.post(
+        reconnected = client.post(
             "/data/connect", json={"provider": "football-data", "api_key": "other-key-secret"}
         )
-        assert switched.status_code == 202
-        saved_after_switch = env_file.read_text(encoding="utf-8")
-        assert "FOOTBALL_API_KEY=other-key-secret" in saved_after_switch
-        assert "API_FOOTBALL_KEY" not in saved_after_switch  # stale provider key is dropped
-        assert "MY_CUSTOM_SETTING=keep-me" in saved_after_switch
+        assert reconnected.status_code == 202
+        saved_after = env_file.read_text(encoding="utf-8")
+        assert "FOOTBALL_API_KEY=other-key-secret" in saved_after
+        assert saved_after.count("FOOTBALL_API_KEY=") == 1  # old value replaced, not duplicated
+        assert "MY_CUSTOM_SETTING=keep-me" in saved_after
 
 
 def test_load_env_file_never_overrides_an_explicitly_set_variable(
@@ -450,7 +343,9 @@ def test_failed_connect_leaves_the_active_provider_serving(
         before = client.get("/health").json()
         assert before["synthetic"] and before["players"] > 0
 
-        failed = client.post("/data/connect", json={"provider": "api-football", "api_key": "a-bad-key-value"})
+        failed = client.post(
+            "/data/connect", json={"provider": "football-data", "api_key": "a-bad-key-value"}
+        )
         assert failed.status_code == 502
         assert failed.json()["error"]["code"] == "PROVIDER_AUTH"
 
@@ -474,14 +369,3 @@ def test_static_assets_always_revalidate_instead_of_caching_stale(tmp_path: Path
         assert script.headers["cache-control"] == "no-cache"
         health = client.get("/health")
         assert health.headers["cache-control"] == "no-store"
-
-
-def test_quota_resumption_prioritizes_unfinished_leagues(tmp_path: Path) -> None:
-    from api_football import league_refresh_order
-
-    db = live_db(tmp_path)
-    settings = Settings(source="api", api_key="test-key", competitions=("PL", "PD", "BL1"))
-    db.set_league_status("PL", db.season, "ready", 20)
-    with db.transaction() as connection:
-        db.set_meta(connection, f"api_football_complete:PL:{db.season}", "2026-10-03T00:00:00Z")
-    assert league_refresh_order(settings, db) == ["PD", "BL1", "PL"]

@@ -551,7 +551,7 @@ def create_app(
                     409,
                 )
             source = "demo" if body.provider == "demo" else "api"
-            provider = body.provider if source == "api" else "api-football"
+            provider = body.provider if source == "api" else "football-data"
             config = replace(
                 old.settings,
                 source=source,
@@ -566,7 +566,7 @@ def create_app(
             if source == "api":
                 verifier = FootballClient(config, new.database, threading.Event())
                 try:
-                    verifier.get("status" if provider == "api-football" else "competitions")
+                    verifier.get("competitions")
                 finally:
                     verifier.close()
                 if body.remember:
