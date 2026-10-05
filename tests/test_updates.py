@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from datetime import date
@@ -13,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app as app_module
+import config as config_module
 from api_football import parse_statistics, sync_api_football
 from app import create_app
 from config import LEAGUES, Settings, current_season
@@ -335,6 +337,10 @@ def test_connect_validates_key_and_keeps_it_out_of_responses(
 
     monkeypatch.setattr(app_module, "FootballClient", Verifier)
     monkeypatch.setattr(app_module.SyncManager, "start", lambda self, request: "test-run")
+    # Redirect the remembered-key file away from the real repo .env so this test
+    # (which exercises the connect endpoint, remember defaulting to true) can
+    # never write into the project directory.
+    monkeypatch.setattr(config_module, "ENV_FILE", tmp_path / ".env")
     with TestClient(create_app(settings, bootstrap=False, embedder=TestEncoder())) as client:
         assert (
             client.post("/data/connect", json={"provider": "api-football", "api_key": "short"}).status_code
@@ -346,13 +352,73 @@ def test_connect_validates_key_and_keeps_it_out_of_responses(
             headers={"Origin": "https://outside.example"},
         )
         assert blocked.status_code == 403
-        result = client.post("/data/connect", json={"provider": "api-football", "api_key": "test-key-secret"})
+        result = client.post(
+            "/data/connect",
+            json={"provider": "api-football", "api_key": "test-key-secret", "remember": False},
+        )
         assert result.status_code == 202
         assert result.json()["key_storage"] == "server_memory_only"
+        assert not (tmp_path / ".env").exists()
         assert "test-key-secret" not in result.text + client.get("/health").text
         assert client.get("/health").json()["provider"] == "api-football"
     with sqlite3.connect(tmp_path / "matchdaydb-api-football.sqlite3") as connection:
         assert "test-key-secret" not in str(connection.execute("SELECT * FROM app_meta").fetchall())
+
+
+def test_connect_remembers_key_by_default_and_can_opt_out(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The convenience default (remember=true) writes a usable, git-ignored .env file,
+    never echoes the key back in the response, and a provider switch cleans up the
+    previous provider's key while leaving unrelated lines untouched."""
+    settings = Settings(db_path=tmp_path / "demo.sqlite3")
+    env_file = tmp_path / ".env"
+    env_file.write_text("MY_CUSTOM_SETTING=keep-me\n", encoding="utf-8")
+    monkeypatch.setattr(config_module, "ENV_FILE", env_file)
+
+    class Verifier:
+        def __init__(self, config, database, stop):
+            self.config = config
+
+        def get(self, path):
+            return {"response": {}}
+
+        def close(self):
+            return None
+
+    monkeypatch.setattr(app_module, "FootballClient", Verifier)
+    monkeypatch.setattr(app_module.SyncManager, "start", lambda self, request: "test-run")
+    with TestClient(create_app(settings, bootstrap=False, embedder=TestEncoder())) as client:
+        result = client.post("/data/connect", json={"provider": "api-football", "api_key": "test-key-secret"})
+        assert result.status_code == 202
+        assert result.json()["key_storage"] == "remembered_in_local_env_file"
+        assert "test-key-secret" not in result.text
+
+        saved = env_file.read_text(encoding="utf-8")
+        assert "API_FOOTBALL_KEY=test-key-secret" in saved
+        assert "MATCHDAY_PROVIDER=api-football" in saved
+        assert "MY_CUSTOM_SETTING=keep-me" in saved  # untouched, hand-added lines survive
+
+        switched = client.post(
+            "/data/connect", json={"provider": "football-data", "api_key": "other-key-secret"}
+        )
+        assert switched.status_code == 202
+        saved_after_switch = env_file.read_text(encoding="utf-8")
+        assert "FOOTBALL_API_KEY=other-key-secret" in saved_after_switch
+        assert "API_FOOTBALL_KEY" not in saved_after_switch  # stale provider key is dropped
+        assert "MY_CUSTOM_SETTING=keep-me" in saved_after_switch
+
+
+def test_load_env_file_never_overrides_an_explicitly_set_variable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("FOOTBALL_API_KEY=from-file\nMATCHDAY_SOURCE=api\n", encoding="utf-8")
+    monkeypatch.setenv("FOOTBALL_API_KEY", "explicit-wins")
+    monkeypatch.delenv("MATCHDAY_SOURCE", raising=False)
+    config_module.load_env_file(env_file)
+    assert os.environ["FOOTBALL_API_KEY"] == "explicit-wins"
+    assert os.environ["MATCHDAY_SOURCE"] == "api"
 
 
 def test_failed_connect_leaves_the_active_provider_serving(

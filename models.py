@@ -144,6 +144,7 @@ SortOrder = Literal["asc", "desc"]
 class ConnectRequest(Record):
     provider: Literal["football-data", "api-football", "demo"]
     api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
+    remember: bool = True
 
     @model_validator(mode="after")
     def require_key(self) -> ConnectRequest:

@@ -23,7 +23,7 @@ from filelock import FileLock, Timeout
 from starlette.exceptions import HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from config import ROOT, LEAGUES, Settings
+from config import ROOT, LEAGUES, Settings, load_env_file, remember_key
 from database import Database
 from embeddings import LocalEmbedder, index_players, valid_index
 from errors import MatchdayError
@@ -569,6 +569,10 @@ def create_app(
                     verifier.get("status" if provider == "api-football" else "competitions")
                 finally:
                     verifier.close()
+                if body.remember:
+                    # Only persisted once the key is confirmed to work, and only the
+                    # three settings needed to reconnect automatically are written.
+                    remember_key(provider, config.api_key)
             run_id = new.manager.start(SyncRequest())
             old.manager.close()
             current = new
@@ -577,7 +581,9 @@ def create_app(
             "run_id": run_id,
             "provider": body.provider,
             "status_url": f"/sync/{run_id}",
-            "key_storage": "server_memory_only",
+            "key_storage": "remembered_in_local_env_file"
+            if source == "api" and body.remember
+            else "server_memory_only",
         }
 
     @application.post("/sync", status_code=202)
@@ -613,6 +619,7 @@ def main() -> None:
         parser.error("Port must be between 1 and 65535.")
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
+    load_env_file()
     try:
         settings = Settings.from_env()
         if args.prepare_model:

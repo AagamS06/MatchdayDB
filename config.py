@@ -9,6 +9,8 @@ from pathlib import Path
 from datetime import datetime, UTC
 
 ROOT = Path(__file__).resolve().parent
+ENV_FILE = ROOT / ".env"
+REMEMBERED_KEYS = {"api-football": "API_FOOTBALL_KEY", "football-data": "FOOTBALL_API_KEY"}
 MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 DIMENSION = 384
 LEAGUES = {"PL": "Premier League", "PD": "La Liga", "BL1": "Bundesliga", "SA": "Serie A", "FL1": "Ligue 1"}
@@ -111,3 +113,67 @@ class Settings:
             refresh_hours=int(os.getenv("MATCHDAY_REFRESH_HOURS", "24")),
             requests_per_minute=int(os.getenv("MATCHDAY_REQUESTS_PER_MINUTE", "10")),
         )
+
+
+def _read_env_lines(path: Path) -> list[str]:
+    try:
+        return path.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+
+
+def load_env_file(path: Path = ENV_FILE) -> None:
+    """Load KEY=VALUE lines from a local .env file into the process environment.
+
+    Only called explicitly from the CLI entry point, never at import time or from
+    create_app(), so Settings.from_env() stays free of import-time side effects and
+    tests remain deterministic. An already-exported environment variable always
+    wins: this never overwrites a value the caller set explicitly.
+    """
+    for line in _read_env_lines(path):
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+def remember_key(provider: str, api_key: str, path: Path | None = None) -> None:
+    """Persist a verified provider key to a local, git-ignored .env file.
+
+    Only the three settings needed to reconnect automatically are written
+    (MATCHDAY_SOURCE, MATCHDAY_PROVIDER, and the provider's own key variable).
+    Any other lines already in the file (or added by hand) are preserved as-is.
+    The file is created with owner-only permissions where the OS supports it.
+
+    ``path`` defaults to the module-level ``ENV_FILE`` looked up at call time
+    (not bound as a default argument), so tests can redirect it by patching
+    ``config.ENV_FILE`` without needing to pass a path explicitly.
+    """
+    if path is None:
+        path = ENV_FILE
+    if provider not in REMEMBERED_KEYS:
+        raise ValueError("Only api-football and football-data keys can be remembered.")
+    updates = {
+        "MATCHDAY_SOURCE": "api",
+        "MATCHDAY_PROVIDER": provider,
+        REMEMBERED_KEYS[provider]: api_key,
+    }
+    other_key_vars = set(REMEMBERED_KEYS.values()) - {REMEMBERED_KEYS[provider]}
+    kept: list[str] = []
+    for line in _read_env_lines(path):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            kept.append(line)
+            continue
+        name = stripped.split("=", 1)[0].strip()
+        if name in updates or name in other_key_vars:
+            continue
+        kept.append(line)
+    for name, value in updates.items():
+        kept.append(f"{name}={value}")
+    path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    try:
+        path.chmod(0o600)
+    except (OSError, NotImplementedError):
+        pass  # Best-effort on platforms (e.g. some Windows filesystems) without POSIX permissions.

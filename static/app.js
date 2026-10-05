@@ -242,14 +242,15 @@ async function refresh() {
   finally { state.refreshing = false; }
 }
 $("sync-button").addEventListener("click", async () => { $("sync-button").disabled = true; try { await api("/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_squads: true }) }); await refresh(); } catch (error) { feedback("sync-feedback", error.message, true); $("sync-button").disabled = false; } });
-$("provider").addEventListener("change", () => { const demo = $("provider").value === "demo"; $("key-label").classList.toggle("hidden", demo); $("api-key").required = !demo; $("api-key").value = ""; });
+$("provider").addEventListener("change", () => { const demo = $("provider").value === "demo"; $("key-label").classList.toggle("hidden", demo); $("remember-key").closest("label").classList.toggle("hidden", demo); $("api-key").required = !demo; $("api-key").value = ""; });
 $("connect-form").addEventListener("submit", async (event) => {
   event.preventDefault(); $("connect-button").disabled = true; feedback("connect-feedback", "Validating the connection and starting the import.");
-  let secret = $("api-key").value.trim(); $("api-key").value = "";
+  let secret = $("api-key").value.trim(); const remember = $("remember-key").checked; $("api-key").value = "";
   try {
-    await api("/data/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: $("provider").value, api_key: secret }) });
+    const result = await api("/data/connect", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ provider: $("provider").value, api_key: secret, remember }) });
     secret = ""; state.signature = ""; state.offset = 0; $("query").value = ""; $("team-filter").value = ""; $("twins").replaceChildren(); $("team-results").replaceChildren();
-    feedback("connect-feedback", "Connected. The import is running. The API key is held only for this server session."); await refresh();
+    const remembered = result.key_storage === "remembered_in_local_env_file";
+    feedback("connect-feedback", remembered ? "Connected. The import is running. The key was saved to this project's local .env file so it reconnects automatically next time." : "Connected. The import is running. The API key is held only for this server session."); await refresh();
   } catch (error) { feedback("connect-feedback", error.message, true); $("connect-button").disabled = false; }
   finally { secret = ""; }
 });

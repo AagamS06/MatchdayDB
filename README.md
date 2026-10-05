@@ -51,7 +51,7 @@ Open [http://localhost:8000](http://localhost:8000). The first semantic-model do
 3. Select **API-Football**, enter the key and choose **Connect & sync**.
 4. Watch the five-league coverage table. Players appear as squads and statistics are imported.
 
-The connection form keeps the key only in the local server's memory. It does not write it into browser storage, a database, an environment file or the source code. Restarting the server requires reconnecting unless you configure an environment variable.
+By default, once a key is verified, the connection form also saves it to a local `.env` file next to the app (**Remember this key on this computer** is checked by default). That file never leaves this computer, is never written to a database or the browser, and is already excluded from git (`.gitignore`). Restarting the server reconnects automatically using that file — nothing else to export or configure. Uncheck the box if you'd rather keep the key only in the running server's memory, which is cleared the moment the server stops.
 
 A key belongs to your provider account. Changing a key alone does not grant a different subscription's access. Check current-season access and request quotas in that account. A complete five-league catalogue can require hundreds of calls and exceed a free daily quota. Completed API-Football pages from an incomplete run are cached for 48 hours. Resume after the quota resets. Unfinished and oldest league catalogues are processed first, so completed leagues do not continually consume the next day’s quota. A successful catalogue import clears its temporary pages so the next refresh fetches new records.
 
@@ -88,7 +88,11 @@ If API-Football specifically returns `404 Not Found` when connecting, it almost 
 
 ## Keep a connection across server restarts
 
-The simplest option is to export the key before starting the app. In PowerShell:
+By default this happens automatically: the **Remember this key on this computer** checkbox in **Data & connection** is checked, so once your key verifies, the app writes `MATCHDAY_SOURCE`, `MATCHDAY_PROVIDER`, and the provider's own key variable to a local `.env` file (created with owner-only permissions where the OS supports it) and loads it automatically the next time you run `python app.py`. The file lives at the project root, is listed in `.gitignore`, and is never pushed, synced, or sent anywhere.
+
+If you'd rather not have the key written to disk at all, uncheck that box before connecting — the key then stays only in the running server's memory and you'll need to reconnect (or use one of the manual options below) after a restart. An environment variable you've already exported always takes priority over anything in `.env`.
+
+Manual alternatives, if you'd rather manage the key yourself instead of using `.env`: export it before starting the app. In PowerShell:
 
 ```powershell
 $secret = Read-Host "API-Football key" -AsSecureString
