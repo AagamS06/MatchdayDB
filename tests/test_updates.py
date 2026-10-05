@@ -230,6 +230,31 @@ def test_provider_error_envelope_and_resumable_cache(tmp_path: Path) -> None:
         client.close()
 
 
+def test_api_football_404_explains_likely_host_key_mismatch(tmp_path: Path) -> None:
+    db = live_db(tmp_path)
+    config = Settings(source="api", provider="api-football", api_key="unit-test-key")
+    client = FootballClient(
+        config, db, threading.Event(), httpx.MockTransport(lambda request: httpx.Response(404))
+    )
+    try:
+        with pytest.raises(MatchdayError) as error:
+            client.get("status")
+        assert error.value.code == "PROVIDER_NOT_FOUND"
+        assert "RapidAPI" in error.value.message and "dashboard.api-football.com" in error.value.message
+    finally:
+        client.close()
+    football_data = Settings(source="api", provider="football-data", api_key="unit-test-key")
+    client = FootballClient(
+        football_data, db, threading.Event(), httpx.MockTransport(lambda request: httpx.Response(404))
+    )
+    try:
+        with pytest.raises(MatchdayError) as error:
+            client.get("competitions")
+        assert error.value.code == "PROVIDER_NOT_FOUND" and "RapidAPI" not in error.value.message
+    finally:
+        client.close()
+
+
 def test_parser_never_relabels_tackles_or_passes(tmp_path: Path) -> None:
     player, stats = parse_statistics(
         {"id": 1, "name": "Test", "birth": {"date": "2000-01-01"}},

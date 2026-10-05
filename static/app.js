@@ -20,8 +20,9 @@ async function api(path, options = {}) {
   const timer = setTimeout(() => { timeout = true; controller.abort(); }, 150000);
   try {
     const response = await fetch(path, { ...options, signal: controller.signal, credentials: "same-origin", headers: { Accept: "application/json", ...options.headers } });
-    const payload = await response.json();
-    if (!response.ok) throw new Error(payload.error?.message || `Request failed (${response.status}).`);
+    let payload;
+    try { payload = await response.json(); } catch { throw new Error(`The server returned an unexpected (non-JSON) response (${response.status}). Confirm python app.py is running this version of the code.`); }
+    if (!response.ok) throw new Error(payload.error?.message || payload.detail || payload.message || `Request failed (${response.status}).`);
     return payload;
   } catch (error) {
     if (timeout) throw new Error("This request took too long. Check Data & connection and retry.");
@@ -213,10 +214,11 @@ async function loadFixtures() { const data = await api("/fixtures"); $("fixture-
 function renderHealth(health) {
   state.health = health;
   const running = health.last_sync?.state === "running";
+  const coverage = Array.isArray(health.coverage) ? health.coverage : [];
   $("source-badge").textContent = health.synthetic ? "Demo dataset" : health.provider === "api-football" ? "API-Football" : "football-data.org";
   $("catalogue-count").textContent = `${number(health.players)} players · ${number(health.teams)} teams`;
-  const seasons = [...new Set(health.coverage.map((league) => league.season))]; $("season-label").textContent = `${health.synthetic ? "Demo " : "Season "}${seasons.join(", ")}`;
-  $("data-notice-text").textContent = health.synthetic ? "You're viewing a 60-player historical demo. Connect live data for current squads and stats across all five leagues." : running ? "Updating the catalogue. Imported players remain available while synchronization runs." : health.stats_stale ? "Some statistics are older than the refresh window. Review coverage and refresh your data." : health.coverage.some((league) => league.state !== "ready") ? "League coverage is incomplete. Check the data panel for quota, access or synchronization details." : "Current-season catalogue loaded. See Data & connection for coverage and refresh times.";
+  const seasons = [...new Set(coverage.map((league) => league.season))]; $("season-label").textContent = `${health.synthetic ? "Demo " : "Season "}${seasons.join(", ")}`;
+  $("data-notice-text").textContent = health.synthetic ? "You're viewing a 60-player historical demo. Connect live data for current squads and stats across all five leagues." : running ? "Updating the catalogue. Imported players remain available while synchronization runs." : health.stats_stale ? "Some statistics are older than the refresh window. Review coverage and refresh your data." : coverage.some((league) => league.state !== "ready") ? "League coverage is incomplete. Check the data panel for quota, access or synchronization details." : "Current-season catalogue loaded. See Data & connection for coverage and refresh times.";
   $("notice-action").textContent = health.synthetic ? "Connect live data" : "View coverage";
   $("provider-name").textContent = $("source-badge").textContent;
   $("last-sync").textContent = health.last_sync ? `${health.last_sync.state} · ${dateTime(health.last_sync.finished_at || health.last_sync.started_at)}` : "Not synchronized";
@@ -227,7 +229,7 @@ function renderHealth(health) {
   $("connect-button").disabled = running;
   const report = health.last_sync?.report; const failures = (report?.resources || []).filter((item) => item.state === "failed");
   feedback("sync-feedback", running ? `Synchronization is ${report?.stage || "running"}. Full league imports can take several minutes.` : report?.error?.message || report?.index_error?.message || failures.map((item) => `${item.resource}: ${item.message || item.code}`).join(" "), Boolean(report?.error || failures.length || report?.index_error));
-  $("coverage-table").replaceChildren(...health.coverage.map((league) => { const row = element("tr"); row.title = league.message; for (const value of [league.name, league.season, `${league.squads_loaded}/${league.expected_teams || "—"}`, number(league.players), number(league.players_with_stats), league.state]) row.append(element("td", "", value)); return row; }));
+  $("coverage-table").replaceChildren(...coverage.map((league) => { const row = element("tr"); row.title = league.message; for (const value of [league.name, league.season, `${league.squads_loaded}/${league.expected_teams || "—"}`, number(league.players), number(league.players_with_stats), league.state]) row.append(element("td", "", value)); return row; }));
 }
 async function refresh() {
   if (state.refreshing) return;

@@ -203,9 +203,17 @@ class FootballClient:
                     code = {401: "PROVIDER_AUTH", 403: "PROVIDER_FORBIDDEN", 404: "PROVIDER_NOT_FOUND"}.get(
                         status, "PROVIDER_REQUEST"
                     )
+                    message = f"Provider request returned HTTP {status}."
+                    if status == 404 and self.provider == "api-football":
+                        message = (
+                            "API-Football returned 404 Not Found for this key. This usually means the key "
+                            "was issued for the RapidAPI marketplace (api-football-v1.p.rapidapi.com) rather "
+                            "than the direct api-sports.io host this app calls. Get a key at "
+                            "dashboard.api-football.com, not via RapidAPI, or check for a typo in the key."
+                        )
                     raise MatchdayError(
                         code,
-                        f"Provider request returned HTTP {status}.",
+                        message,
                         502,
                         details={"provider_status": status},
                     )
