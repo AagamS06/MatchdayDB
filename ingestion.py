@@ -211,6 +211,12 @@ class FootballClient:
                             "than the direct api-sports.io host this app calls. Get a key at "
                             "dashboard.api-football.com, not via RapidAPI, or check for a typo in the key."
                         )
+                    elif status == 404 and self.provider == "football-data":
+                        message = (
+                            "football-data.org returned 404 Not Found for this key. A bad or expired token "
+                            "usually returns 403, so 404 here most often means the key itself has a typo or "
+                            "extra whitespace. Check the token at football-data.org/client/register."
+                        )
                     raise MatchdayError(
                         code,
                         message,

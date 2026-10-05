@@ -277,7 +277,13 @@ def create_app(
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'"
         )
-        if not request.url.path.startswith("/static/"):
+        if request.url.path.startswith("/static/"):
+            # Always revalidate static assets instead of letting the browser apply
+            # heuristic caching. StaticFiles still sets ETag/Last-Modified, so an
+            # unchanged file returns a fast 304; a changed one (e.g. after a git
+            # pull or an app update) is never served stale from browser cache.
+            response.headers["Cache-Control"] = "no-cache"
+        else:
             response.headers["Cache-Control"] = "no-store"
         return response
 

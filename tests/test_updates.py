@@ -251,6 +251,7 @@ def test_api_football_404_explains_likely_host_key_mismatch(tmp_path: Path) -> N
         with pytest.raises(MatchdayError) as error:
             client.get("competitions")
         assert error.value.code == "PROVIDER_NOT_FOUND" and "RapidAPI" not in error.value.message
+        assert "football-data.org/client/register" in error.value.message
     finally:
         client.close()
 
@@ -391,6 +392,22 @@ def test_failed_connect_leaves_the_active_provider_serving(
         assert after["synthetic"] and after["provider"] == "demo"
         assert after["players"] == before["players"]
         assert client.get("/players?limit=1").status_code == 200
+
+
+def test_static_assets_always_revalidate_instead_of_caching_stale(tmp_path: Path) -> None:
+    """A fixed bug in app.js or style.css must reach every browser on its next load.
+
+    Static files previously had no Cache-Control header at all, which lets browsers
+    apply heuristic caching and keep serving an old, already-fixed bug indefinitely.
+    API responses (no-store) are unaffected by this.
+    """
+    settings = Settings(db_path=tmp_path / "demo.sqlite3")
+    with TestClient(create_app(settings, bootstrap=False, embedder=TestEncoder())) as client:
+        script = client.get("/static/app.js")
+        assert script.status_code == 200
+        assert script.headers["cache-control"] == "no-cache"
+        health = client.get("/health")
+        assert health.headers["cache-control"] == "no-store"
 
 
 def test_quota_resumption_prioritizes_unfinished_leagues(tmp_path: Path) -> None:
