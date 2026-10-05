@@ -4,4 +4,4 @@ httpx[socks]>=0.27,<1
 fastembed>=0.7,<1
 numpy>=1.26,<3
 pydantic>=2.10,<3
-filelock>=3.16,<4
+filelock>=4.0.9,<5
