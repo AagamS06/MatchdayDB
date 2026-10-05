@@ -1,6 +1,8 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 const state = { health: null, options: { players: [], teams: [] }, offset: 0, total: 0, view: "players", controllers: new Map(), dialogPlayer: null, signature: "", refreshing: false };
+let pendingSelects = { position: "", nationality: "" };
+let selectsApplied = false;
 const roleNames = { GK: "Goalkeeper", CB: "Centre-back", LB: "Left-back", RB: "Right-back", DM: "Defensive midfielder", CM: "Central midfielder", AM: "Attacking midfielder", LW: "Left winger", RW: "Right winger", ST: "Striker", DEF: "Defender", MID: "Midfielder", FWD: "Forward", UNKNOWN: "Unknown position" };
 const leagueNames = { PL: "Premier League", PD: "La Liga", BL1: "Bundesliga", SA: "Serie A", FL1: "Ligue 1" };
 const formatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
@@ -32,10 +34,44 @@ function showView(view) {
   document.querySelectorAll(".tab").forEach((node) => { const active = node.dataset.view === view; node.classList.toggle("active", active); if (active) node.setAttribute("aria-current", "page"); else node.removeAttribute("aria-current"); });
 }
 function themeLabel() { const dark = document.documentElement.dataset.theme === "dark"; $("theme-toggle").textContent = dark ? "Light theme" : "Dark theme"; $("theme-toggle").setAttribute("aria-label", `Switch to ${dark ? "light" : "dark"} theme`); }
+function syncURL() {
+  const params = new URLSearchParams();
+  if (state.view !== "players") params.set("view", state.view);
+  const q = $("query").value.trim(); if (q) params.set("q", q);
+  if ($("search-mode").value !== "players") params.set("mode", $("search-mode").value);
+  if ($("team-filter").value.trim()) params.set("team", $("team-filter").value.trim());
+  if ($("position").value) params.set("position", $("position").value);
+  if ($("nationality").value) params.set("nationality", $("nationality").value);
+  if ($("max-age").value) params.set("max_age", $("max-age").value);
+  const league = document.querySelector('input[name="league"]:checked')?.value; if (league) params.set("league", league);
+  if ($("sort-by").value !== "name:asc") params.set("sort", $("sort-by").value);
+  if (state.offset) params.set("offset", String(state.offset));
+  const query = params.toString();
+  history.replaceState(null, "", query ? `?${query}` : location.pathname);
+}
+function restoreFromURL() {
+  const params = new URLSearchParams(location.search);
+  const view = params.get("view");
+  if (view && $(`view-${view}`)) showView(view);
+  $("query").value = params.get("q") || "";
+  const mode = params.get("mode") === "style" ? "style" : "players";
+  $("search-mode").value = mode;
+  $("style-chips").classList.toggle("hidden", mode !== "style");
+  $("query").maxLength = mode === "style" ? 1000 : 200;
+  if (mode === "style") $("query").placeholder = "Describe a role or playing style";
+  $("team-filter").value = params.get("team") || "";
+  if (params.get("max_age")) $("max-age").value = params.get("max_age");
+  const league = params.get("league") || "";
+  const radio = document.querySelector(`input[name="league"][value="${league}"]`); if (radio) radio.checked = true;
+  if (params.get("sort")) $("sort-by").value = params.get("sort");
+  const offset = parseInt(params.get("offset"), 10);
+  state.offset = Number.isFinite(offset) && offset > 0 ? offset : 0;
+  pendingSelects = { position: params.get("position") || "", nationality: params.get("nationality") || "" };
+}
 $("theme-toggle").addEventListener("click", () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = next; try { localStorage.setItem("matchday-theme", next); } catch { /* Preference is optional in private browsing. */ } themeLabel(); });
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => { let saved = false; try { saved = ["dark", "light"].includes(localStorage.getItem("matchday-theme")); } catch { saved = false; } if (!saved) { document.documentElement.dataset.theme = event.matches ? "dark" : "light"; themeLabel(); } });
 themeLabel();
-document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => showView(button.dataset.view)));
+document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => { showView(button.dataset.view); syncURL(); }));
 $("notice-action").addEventListener("click", () => showView("data"));
 function option(value, text) { const node = element("option", "", text); node.value = value; return node; }
 function fillSelect(id, entries, first) { const node = $(id); const old = node.value; node.replaceChildren(option("", first), ...entries.map(([value, label]) => option(value, label))); if ([...node.options].some((item) => item.value === old)) node.value = old; }
@@ -46,6 +82,11 @@ async function refreshOptions() {
   fillSelect("nationality", state.options.nationalities.map((country) => [country, country]), "All countries");
   $("team-list").replaceChildren(...state.options.teams.map((team) => option(team.name, `${team.name} · ${leagueNames[team.league] || team.league}`)));
   fillTwins();
+  if (!selectsApplied) {
+    if (pendingSelects.position && [...$("position").options].some((item) => item.value === pendingSelects.position)) $("position").value = pendingSelects.position;
+    if (pendingSelects.nationality && [...$("nationality").options].some((item) => item.value === pendingSelects.nationality)) $("nationality").value = pendingSelects.nationality;
+    selectsApplied = true;
+  }
 }
 function selectedTeam(text) { const key = text.trim().toLocaleLowerCase(); return state.options.teams.find((team) => team.name.toLocaleLowerCase() === key); }
 function filters() {
@@ -106,7 +147,7 @@ async function loadPlayers() {
   finally { if (!controller.signal.aborted) $("results").setAttribute("aria-busy", "false"); }
 }
 let playerTimer;
-function rerunPlayers() { clearTimeout(playerTimer); state.offset = 0; void loadPlayers(); }
+function rerunPlayers() { clearTimeout(playerTimer); state.offset = 0; syncURL(); void loadPlayers(); }
 function delayedSearch() { clearTimeout(playerTimer); playerTimer = setTimeout(rerunPlayers, 280); }
 $("search-form").addEventListener("submit", (event) => { event.preventDefault(); rerunPlayers(); });
 $("query").addEventListener("input", () => { if ($("search-mode").value === "players") delayedSearch(); });
@@ -116,8 +157,8 @@ document.querySelectorAll('input[name="league"]').forEach((input) => input.addEv
 $("search-mode").addEventListener("change", () => { const semantic = $("search-mode").value === "style"; $("style-chips").classList.toggle("hidden", !semantic); $("query").maxLength = semantic ? 1000 : 200; $("query").placeholder = semantic ? "Describe a role or playing style" : "Search a player, e.g. Bukayo Saka"; $("query").value = ""; rerunPlayers(); });
 document.querySelectorAll("[data-query]").forEach((button) => button.addEventListener("click", () => { $("query").value = button.dataset.query; rerunPlayers(); }));
 $("reset-filters").addEventListener("click", () => { $("search-form").reset(); $("style-chips").classList.add("hidden"); $("query").placeholder = "Search a player, e.g. Bukayo Saka"; $("query").maxLength = 200; rerunPlayers(); });
-$("previous-page").addEventListener("click", () => { state.offset = Math.max(0, state.offset - 12); void loadPlayers(); });
-$("next-page").addEventListener("click", () => { state.offset += 12; void loadPlayers(); });
+$("previous-page").addEventListener("click", () => { state.offset = Math.max(0, state.offset - 12); syncURL(); void loadPlayers(); });
+$("next-page").addEventListener("click", () => { state.offset += 12; syncURL(); void loadPlayers(); });
 function showPlayer(player) {
   state.dialogPlayer = player; const content = $("dialog-content"); const title = element("h2", "", player.name); title.id = "dialog-title";
   content.replaceChildren(title, element("p", "", `${player.team_name || "No club"} · ${roleNames[player.position] || player.position} · ${player.age === null ? "Age unknown" : `Age ${player.age}`}`), element("p", "", player.tactical_summary));
@@ -211,5 +252,6 @@ $("connect-form").addEventListener("submit", async (event) => {
   finally { secret = ""; }
 });
 window.addEventListener("pagehide", () => { $("api-key").value = ""; for (const controller of state.controllers.values()) controller.abort(); });
+restoreFromURL();
 void refresh();
 setInterval(() => { if (!document.hidden) void refresh(); }, 5000);
