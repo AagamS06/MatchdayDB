@@ -22,7 +22,7 @@
   </header>
   <main id="main" class="shell">
     <div class="intro"><div><h1>Scouting workspace</h1><p>Find players. Compare profiles. Plan your squad.</p></div><div class="catalogue-meta"><span id="catalogue-count">Connecting</span><span id="season-label"></span></div></div>
-    <nav class="tabs" aria-label="Workspace sections"><button type="button" class="tab active" data-view="players" aria-current="page">Players</button><button type="button" class="tab" data-view="twins">Player twins</button><button type="button" class="tab" data-view="team">Team scout</button><button type="button" class="tab" data-view="data">Data &amp; connection</button></nav>
+    <nav class="tabs" aria-label="Workspace sections"><button type="button" class="tab active" data-view="players" aria-current="page">Players</button><button type="button" class="tab" data-view="twins">Player twins</button><button type="button" class="tab" data-view="team">Understudy SLM</button><button type="button" class="tab" data-view="data">Data &amp; connection</button></nav>
     <div class="notice" id="data-notice"><p id="data-notice-text">Checking the local database.</p><button class="text-button" type="button" id="notice-action">View data</button></div>
 
     <section id="view-players" class="view" aria-labelledby="players-title">
@@ -46,10 +46,10 @@
     </section>
 
     <section id="view-team" class="view hidden" aria-labelledby="team-title">
-      <div class="section-line"><div><h2 id="team-title">Team scout</h2><p>Assess squad needs and find relevant players across the database.</p></div></div>
+      <div class="section-line"><div><h2 id="team-title">Understudy SLM</h2><p>Finds the gaps in a squad's current shape and suggests players from the database who could fill them.</p></div></div>
       <form id="team-form" class="panel team-form"><label>Search a team<input id="audit-team" type="search" list="team-list" autocomplete="off" placeholder="Start typing a club name" required></label><label>Recruitment age limit<input id="audit-age" type="number" min="14" max="60" placeholder="Any age"></label><button type="submit" class="button primary">Analyse squad</button></form>
       <p id="team-feedback" class="feedback" role="status" aria-live="polite">Choose a club to review its squad.</p><div id="team-results"></div>
-      <p class="footnote">Recommendations explain the available evidence. Formation, injuries, wages, contracts and transfer availability are not included.</p>
+      <p class="footnote">Today this runs on statistical thresholds against the connected seasons only &mdash; formation, injuries, wages, contracts and transfer availability aren't included. A deeper, trained version covering historical seasons is planned.</p>
     </section>
 
     <section id="view-data" class="view hidden" aria-labelledby="data-title">
