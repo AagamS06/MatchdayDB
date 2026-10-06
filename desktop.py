@@ -16,6 +16,7 @@ It does three things `python app.py` on its own doesn't:
 from __future__ import annotations
 
 import logging
+import os
 import socket
 import sys
 import threading
@@ -30,6 +31,42 @@ from config import DATA_ROOT, Settings, load_env_file
 HOST = "127.0.0.1"
 PREFERRED_PORT = 8000
 LOG_FILE = DATA_ROOT / "matchdaydb.log"
+
+# Keeps the ctypes callback below alive for the life of the process --
+# without a reference somewhere, Python can garbage-collect it and Windows
+# silently stops calling it.
+_console_close_handler = None
+
+
+def _install_windows_close_handler() -> None:
+    """Make closing the console window actually stop the server.
+
+    On Windows, clicking a console's X button sends CTRL_CLOSE_EVENT, which
+    Python doesn't turn into a KeyboardInterrupt the way it does Ctrl+C.
+    Left alone, the OS just gives the process up to ~5 seconds to exit on
+    its own -- and if anything blocks during that window (a logging call
+    writing to the stdout handle the closing console just invalidated,
+    uvicorn's graceful-shutdown sequence waiting on an open connection),
+    the process can be left stuck: still bound to the port, still "running"
+    with no window to see or control it, which is what looks like
+    localhost "freezing" instead of the app actually stopping. Registering
+    an explicit handler that exits immediately on close sidesteps all of
+    that -- there's nothing left to hang.
+    """
+    global _console_close_handler
+    if sys.platform != "win32":
+        return
+    import ctypes
+
+    handler_routine = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_uint)
+
+    def handler(event: int) -> bool:
+        if event in (2, 5, 6):  # CTRL_CLOSE, CTRL_LOGOFF, CTRL_SHUTDOWN
+            os._exit(0)
+        return False
+
+    _console_close_handler = handler_routine(handler)
+    ctypes.windll.kernel32.SetConsoleCtrlHandler(_console_close_handler, True)
 
 
 def find_free_port(preferred: int = PREFERRED_PORT) -> int:
@@ -60,6 +97,7 @@ def open_browser_when_ready(url: str, stop: threading.Event) -> None:
 
 
 def main() -> None:
+    _install_windows_close_handler()
     DATA_ROOT.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
