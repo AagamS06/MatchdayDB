@@ -12,3 +12,6 @@ var/
 *.lock
 coverage.xml
 .coverage
+*.log
+build/
+dist/

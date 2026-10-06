@@ -17,6 +17,11 @@ Browse players by name, team and league. Compare playing styles, inspect provide
 
 ## Start locally
 
+Want a double-click app with no terminal involved at all? See
+[`packaging/BUILD.md`](packaging/BUILD.md) for building a standalone
+Windows/macOS/Linux version. The rest of this section is for running it
+from source instead.
+
 Use Python 3.11 or newer. Extract the project archive and open its `MatchdayDB` folder. If the source has been uploaded to GitHub, you can also clone [AagamS06/MatchdayDB](https://github.com/AagamS06/MatchdayDB).
 
 ```bash

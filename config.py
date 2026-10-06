@@ -4,12 +4,50 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from datetime import datetime, UTC
 
-ROOT = Path(__file__).resolve().parent
-ENV_FILE = ROOT / ".env"
+SOURCE_ROOT = Path(__file__).resolve().parent
+
+
+def _resource_root() -> Path:
+    """Where bundled read-only assets (schema.sql, static/) live.
+
+    Running from source, that's just the repo itself. Packaged with
+    PyInstaller, it's the extracted bundle directory (``sys._MEIPASS`` --
+    a temp folder for a --onefile build, or the folder next to the
+    executable for --onedir).
+    """
+    if getattr(sys, "frozen", False):
+        return Path(getattr(sys, "_MEIPASS", Path(sys.executable).resolve().parent))
+    return SOURCE_ROOT
+
+
+def _default_data_dir() -> Path:
+    """Where this installation's writable data (database, model cache, the
+    remembered API key) lives by default.
+
+    Running from source, that's next to the code, exactly as it always has
+    been. Packaged as a standalone app, the bundle's own folder may be
+    read-only or get replaced on update, so writable data instead goes to
+    a per-user app-data folder outside the bundle.
+    """
+    if not getattr(sys, "frozen", False):
+        return SOURCE_ROOT
+    if sys.platform == "win32":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return base / "MatchdayDB"
+
+
+ROOT = _resource_root()
+DATA_ROOT = _default_data_dir()
+ENV_FILE = DATA_ROOT / ".env"
 REMEMBERED_KEYS = {"football-data": "FOOTBALL_API_KEY"}
 MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 DIMENSION = 384
@@ -52,8 +90,8 @@ class Settings:
     source: str = "demo"
     api_key: str = field(default="", repr=False)
     provider: str = "football-data"
-    db_path: Path = ROOT / "var" / "matchdaydb-demo.sqlite3"
-    model_cache: Path = ROOT / ".cache" / "models"
+    db_path: Path = DATA_ROOT / "var" / "matchdaydb-demo.sqlite3"
+    model_cache: Path = DATA_ROOT / ".cache" / "models"
     season: str = "auto"
     offline: bool = False
     competitions: tuple[str, ...] = tuple(LEAGUES)
@@ -107,12 +145,12 @@ class Settings:
             db_path=Path(
                 os.getenv(
                     "MATCHDAY_DB_PATH",
-                    str(ROOT / "var" / f"matchdaydb-{provider if source == 'api' else 'demo'}.sqlite3"),
+                    str(DATA_ROOT / "var" / f"matchdaydb-{provider if source == 'api' else 'demo'}.sqlite3"),
                 )
             )
             .expanduser()
             .resolve(),
-            model_cache=Path(os.getenv("MATCHDAY_MODEL_CACHE", str(ROOT / ".cache" / "models")))
+            model_cache=Path(os.getenv("MATCHDAY_MODEL_CACHE", str(DATA_ROOT / ".cache" / "models")))
             .expanduser()
             .resolve(),
             season=os.getenv("MATCHDAY_SEASON", "auto"),
@@ -186,6 +224,7 @@ def remember_key(provider: str, api_key: str, path: Path | None = None) -> None:
         kept.append(line)
     for name, value in updates.items():
         kept.append(f"{name}={value}")
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(kept) + "\n", encoding="utf-8")
     try:
         path.chmod(0o600)
