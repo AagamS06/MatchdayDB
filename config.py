@@ -14,6 +14,9 @@ REMEMBERED_KEYS = {"football-data": "FOOTBALL_API_KEY"}
 MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 DIMENSION = 384
 LEAGUES = {
+    "WC": "FIFA World Cup",
+    "CL": "Champions League",
+    "EC": "European Championship",
     "PL": "Premier League",
     "PD": "La Liga",
     "BL1": "Bundesliga",
@@ -23,16 +26,13 @@ LEAGUES = {
     "DED": "Eredivisie",
     "ELC": "Championship",
     "BSA": "Campeonato Brasileiro Série A",
-    "CL": "Champions League",
-    "WC": "FIFA World Cup",
-    "EC": "European Championship",
 }
 
 # Competitions whose squads are drawn from clubs that already belong to one of
 # the domestic leagues above (or to a league outside our free-tier coverage).
-# Teams here are synced last and only to pick up clubs not already covered by
-# a domestic league sync in the same run — never to re-fetch or relabel a
-# squad a domestic league already supplied.
+# These sync first (World Cup, then the rest) and only pick up clubs not
+# already covered by a later domestic league sync in the same run — never
+# re-fetching or relabeling a squad a domestic league goes on to supply.
 CONTINENTAL_COMPETITIONS = frozenset({"CL", "WC", "EC"})
 
 
