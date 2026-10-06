@@ -8,7 +8,7 @@ from statistics import median
 from typing import Any
 
 from config import LEAGUES
-from database import Database, per90
+from database import Database
 from errors import MatchdayError
 from scout import age_on, public_player, role_group
 
@@ -24,6 +24,34 @@ METRIC_RULES = (
 
 def percentile(value: float, peers: list[float]) -> float:
     return 100 * (sum(p < value for p in peers) + 0.5 * sum(p == value for p in peers)) / len(peers)
+
+
+def estimated_minutes(row: dict[str, Any]) -> int | None:
+    """Minutes played, or a full-match estimate when the provider only gives appearances.
+
+    football-data.org's free tier never supplies minutes played — only matches
+    played, goals, and assists for the competition's top scorers. Without this
+    fallback, every per-90 check would be permanently skipped on live data.
+    """
+    minutes = row.get("minutes_played")
+    if minutes:
+        return minutes
+    matches = row.get("matches_played")
+    return matches * 90 if matches else None
+
+
+def has_sufficient_sample(row: dict[str, Any]) -> bool:
+    minutes = row.get("minutes_played")
+    if minutes is not None:
+        return minutes >= 450
+    matches = row.get("matches_played")
+    return bool(matches and matches >= 5)
+
+
+def rate_per90(row: dict[str, Any], metric: str) -> float | None:
+    minutes = estimated_minutes(row)
+    value = row.get(metric)
+    return round(90 * value / minutes, 3) if minutes and value is not None else None
 
 
 def audit_team(
@@ -93,31 +121,34 @@ def audit_team(
                         "baseline": None,
                     }
                 )
-    eligible_stats = [
-        r for r in league_rows if (r.get("minutes_played") or 0) >= 450 and r["season"] == season
-    ]
+    eligible_stats = [r for r in league_rows if has_sufficient_sample(r) and r["season"] == season]
     for role, metric, title, unit in METRIC_RULES:
         members = [
             r
             for r in eligible_stats
-            if r["team_id"] == team_id and role_group(r["position"]) == role and per90(r)[metric] is not None
+            if r["team_id"] == team_id
+            and role_group(r["position"]) == role
+            and rate_per90(r, metric) is not None
         ]
         peers = [
             r
             for r in eligible_stats
-            if r["team_id"] != team_id and role_group(r["position"]) == role and per90(r)[metric] is not None
+            if r["team_id"] != team_id
+            and role_group(r["position"]) == role
+            and rate_per90(r, metric) is not None
         ]
         peer_teams: dict[int, list[dict[str, Any]]] = defaultdict(list)
         for row in peers:
             peer_teams[row["team_id"]].append(row)
         if not members or len(peer_teams) < 5:
             excluded_checks.append(
-                f"{title}: needs a player with 450+ minutes and five comparable clubs with this metric."
+                f"{title}: needs a player with 5+ matches (or 450+ minutes where available) and "
+                "five comparable clubs with this metric."
             )
             continue
-        baseline = 90 * sum(r[metric] for r in members) / sum(r["minutes_played"] for r in members)
+        baseline = 90 * sum(r[metric] for r in members) / sum(estimated_minutes(r) for r in members)
         values = [
-            90 * sum(r[metric] for r in group) / sum(r["minutes_played"] for r in group)
+            90 * sum(r[metric] for r in group) / sum(estimated_minutes(r) for r in group)
             for group in peer_teams.values()
         ]
         rank = percentile(baseline, values)
@@ -131,7 +162,7 @@ def audit_team(
                     "title": f"Improve {title.lower()}",
                     "priority": "high" if rank < 15 else "medium",
                     "evidence": f"Observed {role} group: {baseline:.2f} {unit}; peer-club median {benchmark:.2f}, percentile {rank:.0f} across {len(values)} clubs.",
-                    "method": f"Minutes-weighted rate among players with 450+ minutes in {LEAGUES.get(team['league'], team['league'])}; missing metrics are excluded. Different tactics and minutes can affect comparisons.",
+                    "method": f"Rate among players with 5+ matches (450+ minutes where the provider supplies minutes) in {LEAGUES.get(team['league'], team['league'])}; missing metrics are excluded. Matches-played samples use an estimated 90 minutes per match. Different tactics and minutes can affect comparisons.",
                     "metric": metric,
                     "baseline": round(baseline, 4),
                     "benchmark": round(benchmark, 4),
@@ -154,10 +185,10 @@ def audit_team(
             age = age_on(row["date_of_birth"], as_of)
             if issue["type"] == "succession" and (age is None or age > 25):
                 continue
-            value = per90(row).get(metric) if metric else None
+            value = rate_per90(row, metric) if metric else None
             if metric and (
                 value is None
-                or (row.get("minutes_played") or 0) < 450
+                or not has_sufficient_sample(row)
                 or row["season"] != season
                 or value <= issue["baseline"]
             ):
@@ -165,7 +196,14 @@ def audit_team(
             item = public_player(row, as_of)
             if metric:
                 score = value
-                reason = f"{value:.2f} per 90 compared with the squad's {issue['baseline']:.2f}; {row['minutes_played']} recorded minutes."
+                minutes_note = (
+                    f"{row['minutes_played']} recorded minutes"
+                    if row.get("minutes_played")
+                    else f"{row.get('matches_played')} matches played (minutes estimated)"
+                )
+                reason = (
+                    f"{value:.2f} per 90 compared with the squad's {issue['baseline']:.2f}; {minutes_note}."
+                )
             else:
                 score = row.get("rating")
                 reason = f"Registered {issue['role']}" + (f", age {age}" if age is not None else "") + "."
