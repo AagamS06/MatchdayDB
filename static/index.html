@@ -13,8 +13,7 @@
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
-  <div class="side-deco side-deco-left" aria-hidden="true"></div>
-  <div class="side-deco side-deco-right" aria-hidden="true"></div>
+  <div class="app-shell">
   <header class="header">
     <div class="header-inner">
       <a class="brand" href="/" aria-label="MatchdayDB home"><span class="brand-mark" aria-hidden="true">M</span>Matchday<span class="brand-suffix">DB</span></a>
@@ -61,6 +60,7 @@
     </section>
     <footer><span>Created by <a href="https://github.com/AagamS06" target="_blank" rel="noopener noreferrer">Aagam Shah (AagamS06)</a></span><div><a href="https://github.com/AagamS06/MatchdayDB" target="_blank" rel="noopener noreferrer">Source on GitHub ↗</a><a href="/openapi.json">API reference</a></div></footer>
   </main>
+  </div>
   <datalist id="team-list"></datalist>
   <dialog id="player-dialog" aria-labelledby="dialog-title"><div class="dialog-header"><span class="subtle">Player profile</span><button type="button" id="close-dialog" class="button quiet" aria-label="Close player profile">Close ×</button></div><div id="dialog-content"></div><button class="button primary" id="dialog-compare" type="button">Find player twins</button></dialog>
   <dialog id="key-prompt-dialog" aria-labelledby="key-prompt-title"><div class="dialog-header"><span class="subtle" id="key-prompt-title">Connect football-data.org</span><button type="button" id="key-prompt-dismiss" class="button quiet" aria-label="Use demo data instead">Close ×</button></div><p>Enter a football-data.org key to load current squads, fixtures and top scorers for every free-tier competition. Without one, MatchdayDB shows a 60-player synthetic demo.</p><form id="key-prompt-form"><label id="key-prompt-label">API key<input id="key-prompt-key" type="password" autocomplete="off" spellcheck="false" minlength="8" maxlength="256" required></label><label class="checkbox-row"><input id="key-prompt-remember" type="checkbox" checked><span>Remember this key on this computer</span></label><button class="button primary" id="key-prompt-connect" type="submit">Connect &amp; sync</button></form><p id="key-prompt-feedback" class="feedback" role="status" aria-live="polite"></p><a href="https://www.football-data.org/client/register" target="_blank" rel="noopener noreferrer" class="text-link">Get a football-data.org key ↗</a><button type="button" id="key-prompt-skip" class="text-button">Use demo data instead</button></dialog>
