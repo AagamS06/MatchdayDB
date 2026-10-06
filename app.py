@@ -508,10 +508,18 @@ def create_app(
         limit: Annotated[int, Query(ge=1, le=100)] = 25,
     ) -> dict[str, Any]:
         rows = ctx.database.candidates(filters)
+        # football-data.org's free tier never populates marketValue for most
+        # (often all) squads, so a strict "value = production / market value"
+        # ranking can come back completely empty even though the production
+        # data itself is fine. Detect that up front and fall back to a pure
+        # productivity-per-90 leaderboard instead of returning nothing.
+        pricing_available = any(row.get("market_value") for row in rows)
         scored: list[dict[str, Any]] = []
         for row in rows:
+            if not has_sufficient_sample(row):
+                continue
             value = row.get("market_value")
-            if not value or not has_sufficient_sample(row):
+            if pricing_available and not value:
                 continue
             minutes = estimated_minutes(row)
             if not minutes:
@@ -520,7 +528,7 @@ def create_app(
             rate = 90 * contributions / minutes
             if rate <= 0:
                 continue
-            score = rate / (value / 1_000_000)
+            score = rate / (value / 1_000_000) if value else rate
             item = public_player(row, filters.as_of, valid_index(row, ctx.engine, ctx.database.season))
             item.update(
                 goal_contributions_per90=round(rate, 3),
@@ -533,13 +541,22 @@ def create_app(
             )
             scored.append(item)
         scored.sort(key=lambda r: r["value_score"], reverse=True)
+        method = (
+            "Goals + assists per 90 minutes, divided by market value in millions. Higher is better "
+            "value. Needs 5+ matches (or 450+ minutes where the provider supplies minutes) and a known "
+            "market value."
+            if pricing_available
+            else "This provider isn't returning market values for your tracked squads, so this is ranked "
+            "by pure production instead: goals + assists per 90 minutes, needing 5+ matches (or 450+ "
+            "minutes where the provider supplies minutes). Market-value-based ranking will switch back on "
+            "automatically if the provider ever supplies values."
+        )
         return {
             "total": len(scored),
             "limit": limit,
             "items": scored[:limit],
-            "method": "Goals + assists per 90 minutes, divided by market value in millions. Higher is better "
-            "value. Needs 5+ matches (or 450+ minutes where the provider supplies minutes) and a known "
-            "market value; many squads won't have a market value from this provider.",
+            "pricing_available": pricing_available,
+            "method": method,
         }
 
     @application.get("/nationalities")

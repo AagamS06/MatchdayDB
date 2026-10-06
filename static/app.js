@@ -285,8 +285,9 @@ async function loadValueFinder() {
     const result = await api(`/value-finder?${valueFilters()}&limit=30`, { signal: controller.signal });
     if (controller.signal.aborted) return;
     $("value-method").textContent = result.method;
-    if (!result.items.length) { $("value-table").replaceChildren(); feedback("value-feedback", "No players meet the sample-size and market-value requirements for this filter yet."); return; }
-    feedback("value-feedback", `${result.total} ranked players`);
+    $("value-score-head").textContent = result.pricing_available ? "Value score" : "G+A / 90 rank";
+    if (!result.items.length) { $("value-table").replaceChildren(); feedback("value-feedback", "No players meet the sample-size requirements for this filter yet."); return; }
+    feedback("value-feedback", result.pricing_available ? `${result.total} ranked players` : `${result.total} ranked players (market values aren't available from your data provider, so this is ranked by production instead)`);
     $("value-table").replaceChildren(...result.items.map((player) => {
       const tr = element("tr");
       const nameTd = element("td"); const button = element("button", "row-button", player.name); button.type = "button"; button.addEventListener("click", () => showPlayer(player)); nameTd.append(button); tr.append(nameTd);
