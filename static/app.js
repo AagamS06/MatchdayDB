@@ -72,7 +72,7 @@ function restoreFromURL() {
 $("theme-toggle").addEventListener("click", () => { const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = next; try { localStorage.setItem("matchday-theme", next); } catch { /* Preference is optional in private browsing. */ } themeLabel(); });
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (event) => { let saved = false; try { saved = ["dark", "light"].includes(localStorage.getItem("matchday-theme")); } catch { saved = false; } if (!saved) { document.documentElement.dataset.theme = event.matches ? "dark" : "light"; themeLabel(); } });
 themeLabel();
-document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => { showView(button.dataset.view); syncURL(); }));
+document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => { showView(button.dataset.view); syncURL(); onViewShown(button.dataset.view); }));
 $("notice-action").addEventListener("click", () => showView("data"));
 function option(value, text) { const node = element("option", "", text); node.value = value; return node; }
 function fillSelect(id, entries, first) { const node = $(id); const old = node.value; node.replaceChildren(option("", first), ...entries.map(([value, label]) => option(value, label))); if ([...node.options].some((item) => item.value === old)) node.value = old; }
@@ -211,6 +211,133 @@ $("team-form").addEventListener("submit", async (event) => {
   } catch (error) { if (error.name !== "AbortError") feedback("team-feedback", error.message, true); }
 });
 async function loadFixtures() { const data = await api("/fixtures"); $("fixture-source").textContent = data.synthetic ? "Synthetic fixture examples" : "Stored provider snapshots"; const cards = data.items.map((fixture) => { const card = element("article", "fixture"); card.append(element("p", "fixture-head", `${dateTime(fixture.kickoff)} · ${fixture.status}`)); for (const side of ["home", "away"]) { const row = element("div", "fixture-row"); row.append(element("span", "", fixture[side] || fixture[`${side}_name`]), element("strong", "", number(fixture[`${side}_score`]))); card.append(row); } return card; }); $("fixtures").replaceChildren(...cards); if (!cards.length) empty($("fixtures"), "No fixtures loaded", "They will appear after a successful provider sync."); }
+function populateLeagueSelect(id, withAll) {
+  const order = [...document.querySelectorAll('input[name="league"]')].map((input) => [input.value, input.nextElementSibling.textContent]).filter(([value]) => value);
+  const node = $(id);
+  node.replaceChildren(...(withAll ? [option("", "All leagues")] : []), ...order.map(([value, label]) => option(value, label)));
+  if (!withAll) node.value = order[0]?.[0] || "";
+}
+function formDots(form) {
+  if (!form) return element("span", "subtle", "—");
+  const row = element("span", "form-dots");
+  for (const result of form.split(",").map((item) => item.trim()).filter(Boolean)) {
+    const code = result[0]?.toLowerCase();
+    const dot = element("span", `form-dot ${"wdl".includes(code) ? code : ""}`);
+    dot.title = result;
+    row.append(dot);
+  }
+  return row;
+}
+function teamCell(team) {
+  const cell = element("span", "team-cell");
+  if (team.crest_url) { const img = element("img", "team-crest"); img.src = team.crest_url; img.alt = ""; img.loading = "lazy"; img.addEventListener("error", () => img.remove()); cell.append(img); }
+  cell.append(element("span", "", team.team_short_name || team.team_name));
+  return cell;
+}
+async function loadStandings() {
+  const league = $("standings-league").value;
+  if (!league) return;
+  const controller = channel("standings");
+  feedback("standings-feedback", `Loading the ${leagueNames[league] || league} table`);
+  $("standings-groups").replaceChildren();
+  try {
+    const result = await api(`/standings?league=${encodeURIComponent(league)}`, { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    if (!result.groups.length || !result.groups.some((group) => group.teams.length)) {
+      feedback("standings-feedback", state.health?.synthetic ? "Standings aren't part of the synthetic demo. Connect live data to see league tables." : "No standings loaded yet for this competition. Refresh data or check back after the next sync.");
+      return;
+    }
+    feedback("standings-feedback", `${result.name} · ${result.season}`);
+    const blocks = result.groups.map((group) => {
+      const wrap = element("div", "standings-group");
+      if (group.name) wrap.append(element("h3", "", group.name));
+      const tableWrap = element("div", "table-wrap");
+      const table = element("table");
+      const head = element("thead"); const headRow = element("tr");
+      for (const label of ["#", "Team", "P", "W", "D", "L", "GF", "GA", "GD", "Pts", "Form"]) headRow.append(element("th", "", label));
+      head.append(headRow); table.append(head);
+      const body = element("tbody");
+      for (const row of group.teams) {
+        const tr = element("tr");
+        tr.append(element("td", "", String(row.position)));
+        const teamTd = element("td"); teamTd.append(teamCell(row)); tr.append(teamTd);
+        for (const value of [row.played_games, row.won, row.draw, row.lost, row.goals_for, row.goals_against, row.goal_difference, row.points]) tr.append(element("td", "", String(value)));
+        const formTd = element("td"); formTd.append(formDots(row.form)); tr.append(formTd);
+        body.append(tr);
+      }
+      table.append(body); tableWrap.append(table); wrap.append(tableWrap); return wrap;
+    });
+    $("standings-groups").replaceChildren(...blocks);
+  } catch (error) { if (error.name !== "AbortError") feedback("standings-feedback", error.message, true); }
+}
+$("standings-league").addEventListener("change", () => void loadStandings());
+function valueFilters() {
+  const params = new URLSearchParams();
+  if ($("value-league").value) params.set("league", $("value-league").value);
+  if ($("value-position").value) params.set("position", $("value-position").value);
+  if ($("value-age").value) params.set("max_age", $("value-age").value);
+  return params;
+}
+async function loadValueFinder() {
+  const controller = channel("value");
+  feedback("value-feedback", "Loading");
+  try {
+    const result = await api(`/value-finder?${valueFilters()}&limit=30`, { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    $("value-method").textContent = result.method;
+    if (!result.items.length) { $("value-table").replaceChildren(); feedback("value-feedback", "No players meet the sample-size and market-value requirements for this filter yet."); return; }
+    feedback("value-feedback", `${result.total} ranked players`);
+    $("value-table").replaceChildren(...result.items.map((player) => {
+      const tr = element("tr");
+      const nameTd = element("td"); const button = element("button", "row-button", player.name); button.type = "button"; button.addEventListener("click", () => showPlayer(player)); nameTd.append(button); tr.append(nameTd);
+      tr.append(element("td", "", player.team_name || "No club"));
+      tr.append(element("td", "", player.age === null ? "—" : String(player.age)));
+      tr.append(element("td", "", player.market_value ? `€${formatter.format(player.market_value / 1_000_000)}m` : "—"));
+      tr.append(element("td", "", number(player.goal_contributions_per90)));
+      tr.append(element("td", "", number(player.value_score)));
+      return tr;
+    }));
+  } catch (error) { if (error.name !== "AbortError") feedback("value-feedback", error.message, true); }
+}
+$("value-form").addEventListener("submit", (event) => event.preventDefault());
+for (const id of ["value-league", "value-position", "value-age"]) $(id).addEventListener("change", () => void loadValueFinder());
+$("value-reset").addEventListener("click", () => { $("value-form").reset(); void loadValueFinder(); });
+let nationsLoaded = false;
+let activeNation = "";
+async function loadNations() {
+  if (nationsLoaded) return;
+  try {
+    const result = await api("/nationalities");
+    nationsLoaded = true;
+    $("nation-list").replaceChildren(...result.items.map((item) => {
+      const button = element("button", "nation-chip"); button.type = "button";
+      button.append(element("span", "", item.nationality), element("span", "", String(item.players)));
+      button.addEventListener("click", () => void selectNation(item.nationality, button));
+      return button;
+    }));
+    if (!result.items.length) empty($("nation-list"), "No nationalities yet", "Connect live data or check back after a sync.");
+  } catch (error) { feedback("nation-feedback", error.message, true); }
+}
+async function selectNation(nationality, button) {
+  activeNation = nationality;
+  document.querySelectorAll(".nation-chip").forEach((chip) => chip.classList.toggle("active", chip === button));
+  const controller = channel("nation");
+  feedback("nation-feedback", `Loading ${nationality}`);
+  $("nation-players").setAttribute("aria-busy", "true");
+  try {
+    const result = await api(`/players?nationality=${encodeURIComponent(nationality)}&limit=48&sort_by=rating&order=desc`, { signal: controller.signal });
+    if (controller.signal.aborted) return;
+    $("nation-players").replaceChildren(...result.items.map(playerCard));
+    feedback("nation-feedback", `${result.total} players with ${nationality} nationality`);
+    if (!result.items.length) empty($("nation-players"), "No players found", "Try another nationality.");
+  } catch (error) { if (error.name !== "AbortError") feedback("nation-feedback", error.message, true); }
+  finally { if (!controller.signal.aborted) $("nation-players").setAttribute("aria-busy", "false"); }
+}
+function onViewShown(view) {
+  if (view === "standings") { if (!$("standings-league").value) populateLeagueSelect("standings-league", false); if (!$("standings-groups").childElementCount) void loadStandings(); }
+  else if (view === "value") { if (!$("value-league").options.length || $("value-league").options.length === 1) { populateLeagueSelect("value-league", true); fillSelect("value-position", state.options.positions?.map((code) => [code, roleNames[code] || code]) || [], "All positions"); } if (!$("value-table").childElementCount) void loadValueFinder(); }
+  else if (view === "nations") void loadNations();
+}
 function renderHealth(health) {
   state.health = health;
   const running = health.last_sync?.state === "running";
@@ -274,5 +401,5 @@ $("key-prompt-form").addEventListener("submit", async (event) => {
 });
 window.addEventListener("pagehide", () => { $("api-key").value = ""; $("key-prompt-key").value = ""; for (const controller of state.controllers.values()) controller.abort(); });
 restoreFromURL();
-void refresh();
+void refresh().then(() => onViewShown(state.view));
 setInterval(() => { if (!document.hidden) void refresh(); }, 5000);

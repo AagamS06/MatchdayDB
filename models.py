@@ -79,6 +79,23 @@ class PlayerStats(Record):
     stats_team_id: int | None = Field(default=None, gt=0)
 
 
+class Standing(Record):
+    team_id: int = Field(gt=0)
+    league: str = Field(min_length=1, max_length=20)
+    season: str = Field(pattern=r"^\d{4}(?:/\d{4})?$")
+    group_name: str | None = Field(default=None, max_length=60)
+    position: int = Field(gt=0)
+    played_games: Count = 0
+    won: Count = 0
+    draw: Count = 0
+    lost: Count = 0
+    points: int = 0
+    goals_for: Count = 0
+    goals_against: Count = 0
+    goal_difference: int = 0
+    form: str | None = Field(default=None, max_length=40)
+
+
 class Filters(Record):
     q: str | None = Field(default=None, max_length=200)
     team: str | None = Field(default=None, max_length=200)

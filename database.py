@@ -15,7 +15,7 @@ import numpy as np
 
 from config import DIMENSION, ROOT
 from errors import MatchdayError
-from models import Filters, Fixture, Player, PlayerStats, Team, name_key, utc_now
+from models import Filters, Fixture, Player, PlayerStats, Standing, Team, name_key, utc_now
 
 METRICS = ("goals", "assists", "xG", "xA", "progressive_carries", "progressive_passes", "tackles_won")
 
@@ -328,6 +328,31 @@ class Database:
             "INSERT INTO squad_sync VALUES (?,?,?) ON CONFLICT(team_id) DO UPDATE SET season=excluded.season,synced_at=excluded.synced_at",
             (team_id, season, utc_now()),
         )
+
+    def replace_standings(
+        self, connection: sqlite3.Connection, league: str, season: str, rows: list[Standing]
+    ) -> None:
+        """Replace a competition's table for one season with a freshly fetched one."""
+        connection.execute("DELETE FROM standings WHERE league=? AND season=?", (league, season))
+        for row in rows:
+            data = row.model_dump()
+            data["updated_at"] = utc_now()
+            columns = list(data)
+            connection.execute(
+                f"INSERT INTO standings({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                list(data.values()),
+            )
+
+    def standings_for(self, league: str, season: str | None = None) -> list[dict[str, Any]]:
+        season = season or self.season
+        with self.read() as connection:
+            rows = connection.execute(
+                """SELECT s.*, t.name AS team_name, t.short_name AS team_short_name, t.crest_url
+                FROM standings s JOIN teams t ON t.team_id=s.team_id
+                WHERE s.league=? AND s.season=? ORDER BY s.group_name IS NOT NULL, s.group_name, s.position""",
+                (league, season),
+            ).fetchall()
+        return [dict(row) for row in rows]
 
     def set_league_status(self, code: str, season: str, state: str, expected: int, message: str = "") -> None:
         with self.transaction() as connection:

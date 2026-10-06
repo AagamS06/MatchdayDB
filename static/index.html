@@ -22,7 +22,7 @@
   </header>
   <main id="main" class="shell">
     <div class="intro"><div><h1>Scouting workspace</h1><p>Find players. Compare profiles. Plan your squad.</p></div><div class="catalogue-meta"><span id="catalogue-count">Connecting</span><span id="season-label"></span></div></div>
-    <nav class="tabs" aria-label="Workspace sections"><button type="button" class="tab active" data-view="players" aria-current="page">Players</button><button type="button" class="tab" data-view="twins">Player twins</button><button type="button" class="tab" data-view="team">Understudy SLM</button><button type="button" class="tab" data-view="data">Data &amp; connection</button></nav>
+    <nav class="tabs" aria-label="Workspace sections"><button type="button" class="tab active" data-view="players" aria-current="page">Players</button><button type="button" class="tab" data-view="twins">Player twins</button><button type="button" class="tab" data-view="team">Understudy SLM</button><button type="button" class="tab" data-view="standings">Standings</button><button type="button" class="tab" data-view="value">Transfer Compass</button><button type="button" class="tab" data-view="nations">Nations</button><button type="button" class="tab" data-view="data">Data &amp; connection</button></nav>
     <div class="notice" id="data-notice"><p id="data-notice-text">Checking the local database.</p><button class="text-button" type="button" id="notice-action">View data</button></div>
 
     <section id="view-players" class="view" aria-labelledby="players-title">
@@ -50,6 +50,29 @@
       <form id="team-form" class="panel team-form"><label>Search a team<input id="audit-team" type="search" list="team-list" autocomplete="off" placeholder="Start typing a club name" required></label><label>Recruitment age limit<input id="audit-age" type="number" min="14" max="60" placeholder="Any age"></label><button type="submit" class="button primary">Analyse squad</button></form>
       <p id="team-feedback" class="feedback" role="status" aria-live="polite">Choose a club to review its squad.</p><div id="team-results"></div>
       <p class="footnote">Today this runs on statistical thresholds against the connected seasons only &mdash; formation, injuries, wages, contracts and transfer availability aren't included. A deeper, trained version covering historical seasons is planned.</p>
+    </section>
+
+    <section id="view-standings" class="view hidden" aria-labelledby="standings-title">
+      <div class="section-line"><div><h2 id="standings-title">Standings</h2><p>League tables for every tracked competition.</p></div><label class="league-select-label">League<select id="standings-league"></select></label></div>
+      <p id="standings-feedback" class="feedback" role="status" aria-live="polite">Loading standings.</p>
+      <div id="standings-groups"></div>
+      <p class="footnote">Standings come from football-data.org. Group-stage competitions such as the World Cup show one table per group, and show nothing before the draw is made.</p>
+    </section>
+
+    <section id="view-value" class="view hidden" aria-labelledby="value-title">
+      <div class="section-line"><div><h2 id="value-title">Transfer Compass</h2><p>Goal contributions per 90 minutes, weighed against market value &mdash; a bargain finder, not a valuation.</p></div></div>
+      <form id="value-form" class="filters"><label>League<select id="value-league"><option value="">All leagues</option></select></label><label>Position<select id="value-position"><option value="">All positions</option></select></label><label>Maximum age<input id="value-age" type="number" min="14" max="60" placeholder="Any age"></label><button id="value-reset" class="text-button" type="button">Reset</button></form>
+      <p id="value-feedback" class="feedback" role="status" aria-live="polite">Loading.</p>
+      <div class="table-wrap"><table><caption class="sr-only">Transfer Compass results</caption><thead><tr><th>Player</th><th>Team</th><th>Age</th><th>Market value</th><th>G+A / 90</th><th>Value score</th></tr></thead><tbody id="value-table"></tbody></table></div>
+      <p class="footnote" id="value-method"></p>
+    </section>
+
+    <section id="view-nations" class="view hidden" aria-labelledby="nations-title">
+      <div class="section-line"><div><h2 id="nations-title">Nations</h2><p>Browse the catalogue by nationality.</p></div></div>
+      <div class="nation-layout">
+        <div id="nation-list" class="nation-list" aria-label="Nationalities"></div>
+        <div class="nation-results"><p id="nation-feedback" class="feedback" role="status" aria-live="polite">Choose a nationality.</p><div id="nation-players" class="player-grid"></div></div>
+      </div>
     </section>
 
     <section id="view-data" class="view hidden" aria-labelledby="data-title">

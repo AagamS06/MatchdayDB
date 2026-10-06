@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from config import CONTINENTAL_COMPETITIONS, Settings
 from database import Database
 from errors import MatchdayError
-from models import Fixture, Player, PlayerStats, SyncRequest, Team, utc_now
+from models import Fixture, Player, PlayerStats, Standing, SyncRequest, Team, utc_now
 from seed import seed_database
 
 POSITION_MAP = {
@@ -444,6 +444,49 @@ def sync_provider(
                     resources.append(
                         {
                             "resource": f"{code}/scorers",
+                            "state": "failed",
+                            "code": exc.code,
+                            "message": exc.message,
+                        }
+                    )
+                try:
+                    tables = require_list(
+                        client.get(f"competitions/{code}/standings", {"season": season[:4]}), "standings"
+                    )
+                    known_ids = {int(t["id"]) for t in teams}
+                    standing_rows = [
+                        Standing(
+                            team_id=int(entry["team"]["id"]),
+                            league=code,
+                            season=season,
+                            group_name=table.get("group"),
+                            position=entry["position"],
+                            played_games=entry.get("playedGames") or 0,
+                            won=entry.get("won") or 0,
+                            draw=entry.get("draw") or 0,
+                            lost=entry.get("lost") or 0,
+                            points=entry.get("points") or 0,
+                            goals_for=entry.get("goalsFor") or 0,
+                            goals_against=entry.get("goalsAgainst") or 0,
+                            goal_difference=entry.get("goalDifference") or 0,
+                            form=entry.get("form"),
+                        )
+                        for table in tables
+                        for entry in table.get("table", [])
+                        if int(entry["team"]["id"]) in known_ids
+                    ]
+                    with database.transaction() as connection:
+                        database.replace_standings(connection, code, season, standing_rows)
+                    resources.append(
+                        {"resource": f"{code}/standings", "state": "succeeded", "count": len(standing_rows)}
+                    )
+                except MatchdayError as exc:
+                    if exc.code in {"PROVIDER_AUTH", "INTERRUPTED", "PROVIDER_DEFERRED", "PROVIDER_QUOTA"}:
+                        raise
+                    failures += 1
+                    resources.append(
+                        {
+                            "resource": f"{code}/standings",
                             "state": "failed",
                             "code": exc.code,
                             "message": exc.message,

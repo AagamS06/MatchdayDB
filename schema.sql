@@ -119,6 +119,25 @@ CREATE TABLE IF NOT EXISTS squad_sync (
     season TEXT NOT NULL,
     synced_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS standings (
+    team_id INTEGER NOT NULL REFERENCES teams(team_id) ON DELETE CASCADE,
+    league TEXT NOT NULL,
+    season TEXT NOT NULL,
+    group_name TEXT,
+    position INTEGER NOT NULL CHECK (position > 0),
+    played_games INTEGER NOT NULL DEFAULT 0,
+    won INTEGER NOT NULL DEFAULT 0,
+    draw INTEGER NOT NULL DEFAULT 0,
+    lost INTEGER NOT NULL DEFAULT 0,
+    points INTEGER NOT NULL DEFAULT 0,
+    goals_for INTEGER NOT NULL DEFAULT 0,
+    goals_against INTEGER NOT NULL DEFAULT 0,
+    goal_difference INTEGER NOT NULL DEFAULT 0,
+    form TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (league, season, team_id)
+);
+CREATE INDEX IF NOT EXISTS idx_standings_league_season ON standings(league, season, position);
 CREATE TABLE IF NOT EXISTS provider_cache (
     cache_key TEXT PRIMARY KEY,
     payload TEXT NOT NULL,

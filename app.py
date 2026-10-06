@@ -30,7 +30,7 @@ from errors import MatchdayError
 from ingestion import FootballClient, ingest
 from models import ConnectRequest, Filters, Ranking, SortField, SortOrder, SyncRequest, utc_now
 from scout import Scout, public_player
-from team_scout import audit_team
+from team_scout import audit_team, estimated_minutes, has_sufficient_sample
 
 LOGGER = logging.getLogger("matchdaydb")
 
@@ -458,6 +458,101 @@ def create_app(
                 "SELECT f.match_id,f.kickoff,f.status,f.home_score,f.away_score,h.short_name AS home,h.name AS home_name,a.short_name AS away,a.name AS away_name,f.observed_at FROM fixtures f JOIN teams h ON h.team_id=f.home_team_id JOIN teams a ON a.team_id=f.away_team_id ORDER BY ABS(julianday(f.kickoff)-julianday('now')),f.match_id LIMIT 6"
             ).fetchall()
         return {"synthetic": ctx.settings.source == "demo", "items": [dict(row) for row in rows]}
+
+    @application.get("/standings")
+    def standings(
+        ctx: Annotated[Services, Depends(services)],
+        league: str = "WC",
+    ) -> dict[str, Any]:
+        if league not in LEAGUES:
+            raise MatchdayError("INVALID_LEAGUE", "Choose one of the tracked competition codes.", 422)
+        with ctx.database.read() as connection:
+            state = connection.execute(
+                "SELECT season,state,checked_at FROM league_status WHERE code=?", (league,)
+            ).fetchone()
+        season = state["season"] if state else ctx.database.season
+        rows = ctx.database.standings_for(league, season)
+        groups: dict[str | None, list[dict[str, Any]]] = {}
+        for row in rows:
+            groups.setdefault(row["group_name"], []).append(
+                {
+                    "team_id": row["team_id"],
+                    "team_name": row["team_name"],
+                    "team_short_name": row["team_short_name"],
+                    "crest_url": row["crest_url"],
+                    "position": row["position"],
+                    "played_games": row["played_games"],
+                    "won": row["won"],
+                    "draw": row["draw"],
+                    "lost": row["lost"],
+                    "points": row["points"],
+                    "goals_for": row["goals_for"],
+                    "goals_against": row["goals_against"],
+                    "goal_difference": row["goal_difference"],
+                    "form": row["form"],
+                }
+            )
+        return {
+            "league": league,
+            "name": LEAGUES[league],
+            "season": season,
+            "state": state["state"] if state else "pending",
+            "checked_at": state["checked_at"] if state else None,
+            "groups": [{"name": name, "teams": teams} for name, teams in groups.items()],
+        }
+
+    @application.get("/value-finder")
+    def value_finder(
+        filters: Annotated[Filters, Depends(filter_params)],
+        ctx: Annotated[Services, Depends(services)],
+        limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    ) -> dict[str, Any]:
+        rows = ctx.database.candidates(filters)
+        scored: list[dict[str, Any]] = []
+        for row in rows:
+            value = row.get("market_value")
+            if not value or not has_sufficient_sample(row):
+                continue
+            minutes = estimated_minutes(row)
+            if not minutes:
+                continue
+            contributions = (row.get("goals") or 0) + (row.get("assists") or 0)
+            rate = 90 * contributions / minutes
+            if rate <= 0:
+                continue
+            score = rate / (value / 1_000_000)
+            item = public_player(row, filters.as_of, valid_index(row, ctx.engine, ctx.database.season))
+            item.update(
+                goal_contributions_per90=round(rate, 3),
+                value_score=round(score, 4),
+                sample_basis=(
+                    f"{row['minutes_played']} recorded minutes"
+                    if row.get("minutes_played")
+                    else f"{row.get('matches_played')} matches played (minutes estimated)"
+                ),
+            )
+            scored.append(item)
+        scored.sort(key=lambda r: r["value_score"], reverse=True)
+        return {
+            "total": len(scored),
+            "limit": limit,
+            "items": scored[:limit],
+            "method": "Goals + assists per 90 minutes, divided by market value in millions. Higher is better "
+            "value. Needs 5+ matches (or 450+ minutes where the provider supplies minutes) and a known "
+            "market value; many squads won't have a market value from this provider.",
+        }
+
+    @application.get("/nationalities")
+    def nationalities(ctx: Annotated[Services, Depends(services)]) -> dict[str, Any]:
+        rows = ctx.database.candidates()
+        counts: dict[str, int] = {}
+        for row in rows:
+            nat = row.get("nationality")
+            if nat:
+                counts[nat] = counts.get(nat, 0) + 1
+        items = [{"nationality": nat, "players": count} for nat, count in counts.items()]
+        items.sort(key=lambda r: (-r["players"], r["nationality"]))
+        return {"total": len(items), "items": items}
 
     def job_record(row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)
