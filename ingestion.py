@@ -250,13 +250,19 @@ def sync_provider(
     try:
         catalogue = require_list(client.get("competitions"), "competitions")
         available = {str(c.get("code")): c for c in catalogue if c.get("code")}
-        # Domestic leagues always sync before continental/international
-        # competitions, so a club's squad is settled by its home league
-        # first and competitions like the Champions League only need to
-        # fill in the clubs that aren't already covered.
-        ordered_competitions = sorted(
-            settings.competitions, key=lambda code: code in CONTINENTAL_COMPETITIONS
-        )
+
+        # Continental/international competitions sync before domestic
+        # leagues, World Cup first, then the rest in the order given. A
+        # domestic league still won't re-fetch or relabel a squad that a
+        # continental competition already settled earlier in the run.
+        def sync_priority(code: str) -> int:
+            if code == "WC":
+                return 0
+            if code in CONTINENTAL_COMPETITIONS:
+                return 1
+            return 2
+
+        ordered_competitions = sorted(settings.competitions, key=sync_priority)
         for code in ordered_competitions:
             season = settings.effective_season
             expected = 0
