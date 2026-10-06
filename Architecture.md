@@ -38,7 +38,7 @@ The model loads on demand. Background synchronization runs with a process guard 
 | Path | Responsibility |
 | --- | --- |
 | `app.py` | Service lifecycle, endpoints, source switching, security headers, static serving and CLI |
-| `config.py` | Environment validation, five-league constants and effective season |
+| `config.py` | Environment validation, competition constants (all 12 football-data.org free-tier competitions) and effective season |
 | `models.py` | Validated records, requests, normalized names and scalar filter types |
 | `errors.py` | Safe domain error contract |
 | `schema.sql` | Complete schema version 2 |

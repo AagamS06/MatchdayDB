@@ -32,7 +32,7 @@ def live_db(tmp_path: Path) -> Database:
     return db
 
 
-def test_configuration_tracks_season_and_all_five_leagues(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_configuration_tracks_season_and_all_leagues(monkeypatch: pytest.MonkeyPatch) -> None:
     for name in (
         "FOOTBALL_API_KEY",
         "MATCHDAY_SOURCE",
@@ -96,9 +96,9 @@ def test_search_sort_and_team_filters_work_without_ml(tmp_path: Path) -> None:
                 known = [v for v in values if v is not None]
                 assert known == sorted(known, reverse=order == "desc")
         assert client.get("/players", params={"sort_by": "DROP TABLE"}).status_code == 422
-        assert len(client.get("/options").json()["leagues"]) == 5
+        assert len(client.get("/options").json()["leagues"]) == 12
         health = client.get("/health").json()
-        assert health["synthetic"] and len(health["coverage"]) == 5
+        assert health["synthetic"] and len(health["coverage"]) == 12
         assert "API key" not in json.dumps(health)
 
 

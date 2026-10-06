@@ -4,7 +4,7 @@ const state = { health: null, options: { players: [], teams: [] }, offset: 0, to
 let pendingSelects = { position: "", nationality: "" };
 let selectsApplied = false;
 const roleNames = { GK: "Goalkeeper", CB: "Centre-back", LB: "Left-back", RB: "Right-back", DM: "Defensive midfielder", CM: "Central midfielder", AM: "Attacking midfielder", LW: "Left winger", RW: "Right winger", ST: "Striker", DEF: "Defender", MID: "Midfielder", FWD: "Forward", UNKNOWN: "Unknown position" };
-const leagueNames = { PL: "Premier League", PD: "La Liga", BL1: "Bundesliga", SA: "Serie A", FL1: "Ligue 1" };
+const leagueNames = { PL: "Premier League", PD: "La Liga", BL1: "Bundesliga", SA: "Serie A", FL1: "Ligue 1", PPL: "Primeira Liga", DED: "Eredivisie", ELC: "Championship", BSA: "Brasileirão", CL: "Champions League", WC: "World Cup", EC: "Euros" };
 const formatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 const number = (value) => value === null || value === undefined ? "—" : formatter.format(value);
 const dateTime = (value) => value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "Unknown";
@@ -218,7 +218,7 @@ function renderHealth(health) {
   $("source-badge").textContent = health.synthetic ? "Demo dataset" : "football-data.org";
   $("catalogue-count").textContent = `${number(health.players)} players · ${number(health.teams)} teams`;
   const seasons = [...new Set(coverage.map((league) => league.season))]; $("season-label").textContent = `${health.synthetic ? "Demo " : "Season "}${seasons.join(", ")}`;
-  $("data-notice-text").textContent = health.synthetic ? "You're viewing a 60-player historical demo. Connect live data for current squads and stats across all five leagues." : running ? "Updating the catalogue. Imported players remain available while synchronization runs." : health.stats_stale ? "Some statistics are older than the refresh window. Review coverage and refresh your data." : coverage.some((league) => league.state !== "ready") ? "League coverage is incomplete. Check the data panel for quota, access or synchronization details." : "Current-season catalogue loaded. See Data & connection for coverage and refresh times.";
+  $("data-notice-text").textContent = health.synthetic ? "You're viewing a 60-player historical demo. Connect live data for current squads and stats across every free-tier competition." : running ? "Updating the catalogue. Imported players remain available while synchronization runs." : health.stats_stale ? "Some statistics are older than the refresh window. Review coverage and refresh your data." : coverage.some((league) => league.state !== "ready") ? "League coverage is incomplete. Check the data panel for quota, access or synchronization details." : "Current-season catalogue loaded. See Data & connection for coverage and refresh times.";
   $("notice-action").textContent = health.synthetic ? "Connect live data" : "View coverage";
   $("provider-name").textContent = $("source-badge").textContent;
   $("last-sync").textContent = health.last_sync ? `${health.last_sync.state} · ${dateTime(health.last_sync.finished_at || health.last_sync.started_at)}` : "Not synchronized";

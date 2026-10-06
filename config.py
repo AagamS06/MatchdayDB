@@ -13,7 +13,20 @@ ENV_FILE = ROOT / ".env"
 REMEMBERED_KEYS = {"football-data": "FOOTBALL_API_KEY"}
 MODEL_ID = "sentence-transformers/all-MiniLM-L6-v2"
 DIMENSION = 384
-LEAGUES = {"PL": "Premier League", "PD": "La Liga", "BL1": "Bundesliga", "SA": "Serie A", "FL1": "Ligue 1"}
+LEAGUES = {
+    "PL": "Premier League",
+    "PD": "La Liga",
+    "BL1": "Bundesliga",
+    "SA": "Serie A",
+    "FL1": "Ligue 1",
+    "PPL": "Primeira Liga",
+    "DED": "Eredivisie",
+    "ELC": "Championship",
+    "BSA": "Campeonato Brasileiro Série A",
+    "CL": "Champions League",
+    "WC": "FIFA World Cup",
+    "EC": "European Championship",
+}
 
 
 def current_season() -> str:
@@ -99,7 +112,7 @@ class Settings:
             offline=offline_raw in {"true", "1"},
             competitions=tuple(
                 c.strip().upper()
-                for c in os.getenv("MATCHDAY_COMPETITIONS", "PL,PD,BL1,SA,FL1").split(",")
+                for c in os.getenv("MATCHDAY_COMPETITIONS", ",".join(LEAGUES)).split(",")
                 if c.strip()
             ),
             poll_seconds=int(os.getenv("MATCHDAY_POLL_SECONDS", "0")),

@@ -50,21 +50,30 @@ If you haven't connected a live key yet, a dialog asks for your football-data.or
 
 1. Obtain your own key from [football-data.org](https://www.football-data.org/client/register).
 2. Enter it in the dialog that opens automatically, or open **Data & connection** in MatchdayDB and choose **Connect & sync** there.
-3. Watch the five-league coverage table. Players appear as squads are imported.
+3. Watch the league coverage table. Players appear as squads are imported.
 
 By default, once a key is verified, the connection form also saves it to a local `.env` file next to the app (**Remember this key on this computer** is checked by default). That file never leaves this computer, is never written to a database or the browser, and is already excluded from git (`.gitignore`). Restarting the server reconnects automatically using that file — nothing else to export or configure. Uncheck the box if you'd rather keep the key only in the running server's memory, which is cleared the moment the server stops.
 
-A key belongs to your football-data.org account. Check current-season access and request quotas in that account. A complete five-league catalogue can require many calls and may exceed a free-tier daily quota. Completed pages from an incomplete run are cached for 48 hours; resume after the quota resets.
+A key belongs to your football-data.org account. Check current-season access and request quotas in that account. A complete twelve-competition catalogue can require many calls and may exceed a free-tier daily quota. Completed pages from an incomplete run are cached for 48 hours; resume after the quota resets.
 
-Live ingestion has no 60-player cap. The default competitions are:
+Live ingestion has no 60-player cap. The default competitions are every one of football-data.org's free tier:
 
-| League | Code |
+| Competition | Code |
 | --- | --- |
 | English Premier League | `PL` |
 | La Liga | `PD` |
 | Bundesliga | `BL1` |
 | Serie A | `SA` |
 | Ligue 1 | `FL1` |
+| Primeira Liga | `PPL` |
+| Eredivisie | `DED` |
+| Championship | `ELC` |
+| Campeonato Brasileiro Série A | `BSA` |
+| UEFA Champions League | `CL` |
+| FIFA World Cup | `WC` |
+| UEFA European Championship | `EC` |
+
+The tournament entries (Champions League, World Cup, Euros) only have active squads and fixtures during their playing windows; outside those windows they show as unavailable rather than stale. Narrow `MATCHDAY_COMPETITIONS` to a subset if you'd rather not sync all twelve.
 
 ### What each dataset contains
 
