@@ -312,7 +312,7 @@ def sync_provider(
                     if fresh and not request.refresh_squads:
                         continue
                     try:
-                        payload = team if "squad" in team else client.get(f"teams/{team_id}")
+                        payload = team if team.get("squad") else client.get(f"teams/{team_id}")
                         squad = require_list(payload, "squad")
                         players = [
                             Player(
