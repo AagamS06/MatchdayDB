@@ -34,7 +34,7 @@ function showView(view) {
   document.querySelectorAll(".view").forEach((node) => node.classList.toggle("hidden", node.id !== `view-${view}`));
   document.querySelectorAll(".tab").forEach((node) => { const active = node.dataset.view === view; node.classList.toggle("active", active); if (active) node.setAttribute("aria-current", "page"); else node.removeAttribute("aria-current"); });
 }
-function themeLabel() { const dark = document.documentElement.dataset.theme === "dark"; $("theme-toggle").textContent = dark ? "Light theme" : "Dark theme"; $("theme-toggle").setAttribute("aria-label", `Switch to ${dark ? "light" : "dark"} theme`); }
+function themeLabel() { const dark = document.documentElement.dataset.theme === "dark"; $("theme-toggle").setAttribute("aria-checked", String(dark)); $("theme-toggle").setAttribute("aria-label", `Switch to ${dark ? "light" : "dark"} theme`); }
 function syncURL() {
   const params = new URLSearchParams();
   if (state.view !== "players") params.set("view", state.view);
