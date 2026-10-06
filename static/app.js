@@ -169,6 +169,8 @@ function showPlayer(player) {
   $("player-dialog").showModal();
 }
 $("close-dialog").addEventListener("click", () => $("player-dialog").close());
+// Backdrop clicks target the dialog itself; compare against its box so clicks on its own padding don't close it.
+$("player-dialog").addEventListener("click", (event) => { const dialog = event.currentTarget; if (event.target !== dialog) return; const box = dialog.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close(); });
 $("dialog-compare").addEventListener("click", () => { const player = state.dialogPlayer; if (!player) return; $("player-dialog").close(); $("twin-search").value = ""; fillTwins(); $("twin-player").value = String(player.player_id); showView("twins"); void loadTwins(); });
 $("twin-search").addEventListener("input", fillTwins);
 async function loadTwins() {
