@@ -346,8 +346,12 @@ function renderHealth(health) {
   $("source-badge").textContent = health.synthetic ? "Demo dataset" : "football-data.org";
   $("catalogue-count").textContent = `${number(health.players)} players · ${number(health.teams)} teams`;
   const seasons = [...new Set(coverage.map((league) => league.season))]; $("season-label").textContent = `${health.synthetic ? "Demo " : "Season "}${seasons.join(", ")}`;
-  $("data-notice-text").textContent = health.synthetic ? "You're viewing a 60-player historical demo. Connect live data for current squads and stats across every free-tier competition." : running ? "Updating the catalogue. Imported players remain available while synchronization runs." : health.stats_stale ? "Some statistics are older than the refresh window. Review coverage and refresh your data." : coverage.some((league) => league.state !== "ready") ? "League coverage is incomplete. Check the data panel for quota, access or synchronization details." : "Current-season catalogue loaded. See Data & connection for coverage and refresh times.";
+  const noticeText = health.synthetic ? "You're viewing a 60-player historical demo. Connect live data for current squads and stats across every free-tier competition." : running ? "Updating the catalogue. Imported players remain available while synchronization runs." : health.stats_stale ? "Some statistics are older than the refresh window. Review coverage and refresh your data." : coverage.some((league) => league.state !== "ready") ? "League coverage is incomplete. Check the data panel for quota, access or synchronization details." : "Current-season catalogue loaded. See Data & connection for coverage and refresh times.";
+  $("data-notice-text").textContent = noticeText;
   $("notice-action").textContent = health.synthetic ? "Connect live data" : "View coverage";
+  if (lastNoticeText !== null && noticeText !== lastNoticeText) { noticeDismissed = false; try { sessionStorage.removeItem("matchday-notice-dismissed"); } catch { /* Best-effort in private browsing. */ } }
+  lastNoticeText = noticeText;
+  $("data-notice").hidden = noticeDismissed;
   $("provider-name").textContent = $("source-badge").textContent;
   $("last-sync").textContent = health.last_sync ? `${health.last_sync.state} · ${dateTime(health.last_sync.finished_at || health.last_sync.started_at)}` : "Not synchronized";
   $("index-status").textContent = `${health.indexed} of ${health.players} profiles${health.search_ready ? " · ready" : " · preparing"}`;
@@ -367,7 +371,7 @@ async function refresh() {
     const health = await api("/health"); renderHealth(health);
     const signature = `${health.provider}:${health.players}:${health.indexed}:${health.last_sync?.run_id}:${health.last_sync?.state}`;
     if (signature !== state.signature) { await refreshOptions(); await loadPlayers(); await loadFixtures(); state.signature = signature; }
-  } catch (error) { feedback("sync-feedback", error.message, true); $("data-notice-text").textContent = "Could not reach the local service. Check that python app.py is running."; }
+  } catch (error) { feedback("sync-feedback", error.message, true); $("data-notice-text").textContent = "Could not reach the local service. Check that python app.py is running."; $("data-notice").hidden = false; }
   finally { state.refreshing = false; }
 }
 $("sync-button").addEventListener("click", async () => { $("sync-button").disabled = true; try { await api("/sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_squads: true }) }); await refresh(); } catch (error) { feedback("sync-feedback", error.message, true); $("sync-button").disabled = false; } });
@@ -391,6 +395,17 @@ try { keyPromptDismissed = sessionStorage.getItem("matchday-key-prompt-dismissed
 function dismissKeyPrompt() { keyPromptDismissed = true; try { sessionStorage.setItem("matchday-key-prompt-dismissed", "1"); } catch { /* Best-effort in private browsing. */ } $("key-prompt-dialog").close(); }
 $("key-prompt-dismiss").addEventListener("click", dismissKeyPrompt);
 $("key-prompt-skip").addEventListener("click", dismissKeyPrompt);
+
+// The data-coverage banner can be closed to save space; it comes back next
+// time the page loads (or if its message changes), same as the key prompt.
+let noticeDismissed = false;
+let lastNoticeText = null;
+try { noticeDismissed = sessionStorage.getItem("matchday-notice-dismissed") === "1"; } catch { noticeDismissed = false; }
+$("notice-dismiss").addEventListener("click", () => {
+  noticeDismissed = true;
+  try { sessionStorage.setItem("matchday-notice-dismissed", "1"); } catch { /* Best-effort in private browsing. */ }
+  $("data-notice").hidden = true;
+});
 $("key-prompt-form").addEventListener("submit", async (event) => {
   event.preventDefault(); $("key-prompt-connect").disabled = true; feedback("key-prompt-feedback", "Validating the connection and starting the import.");
   let secret = $("key-prompt-key").value.trim(); const remember = $("key-prompt-remember").checked; $("key-prompt-key").value = "";

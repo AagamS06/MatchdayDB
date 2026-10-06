@@ -31,3 +31,7 @@ body{background-color:var(--bg);background-image:url("data:image/svg+xml,%3Csvg 
 .nation-chip span{color:var(--muted);font-variant-numeric:tabular-nums}
 @media(max-width:1060px){.nation-layout{grid-template-columns:1fr}.nation-list{max-height:220px}}
 @media(max-width:650px){.league-select-label{width:100%}}
+.notice[hidden]{display:none}
+.notice-actions{display:flex;align-items:center;gap:4px;flex:none}
+.notice-dismiss{border:0;background:none;color:var(--muted);font-size:17px;line-height:1;padding:4px 6px;border-radius:4px}
+.notice-dismiss:hover{color:var(--text);background:var(--raised)}
