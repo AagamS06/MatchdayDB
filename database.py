@@ -339,7 +339,8 @@ class Database:
             data["updated_at"] = utc_now()
             columns = list(data)
             connection.execute(
-                f"INSERT INTO standings({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                f"INSERT OR REPLACE INTO standings({','.join(columns)}) "
+                f"VALUES ({','.join('?' for _ in columns)})",
                 list(data.values()),
             )
 

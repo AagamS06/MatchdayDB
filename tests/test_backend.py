@@ -263,6 +263,82 @@ def test_provider_partial_squad_entitlement(tmp_path: Path) -> None:
     assert database.candidates() == []
 
 
+def test_standings_ignores_home_away_splits(tmp_path: Path) -> None:
+    """The provider returns one table per type (TOTAL/HOME/AWAY) for every
+    group. Only TOTAL rows form the actual competition table; including the
+    HOME/AWAY splits would re-insert the same (league, season, team_id) and
+    must not blow up the sync."""
+    database = Database(tmp_path / "provider.sqlite3", "api", "2024/2025")
+    database.initialize()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/competitions"):
+            return httpx.Response(
+                200, json={"competitions": [{"id": 1, "code": "PL", "name": "Premier League"}]}
+            )
+        if path.endswith("/matches"):
+            return httpx.Response(200, json={"matches": []})
+        if path.endswith("/PL/teams"):
+            return httpx.Response(
+                200,
+                json={
+                    "teams": [
+                        {
+                            "id": 1,
+                            "name": "Test club",
+                            "squad": [{"id": 1, "name": "Test player", "position": "Centre-Back"}],
+                        }
+                    ]
+                },
+            )
+        if path.endswith("/PL/scorers"):
+            return httpx.Response(200, json={"scorers": []})
+        if path.endswith("/PL/standings"):
+            table_row = {
+                "position": 1,
+                "team": {"id": 1},
+                "playedGames": 10,
+                "won": 7,
+                "draw": 2,
+                "lost": 1,
+                "points": 23,
+                "goalsFor": 20,
+                "goalsAgainst": 5,
+                "goalDifference": 15,
+                "form": "WWDWL",
+            }
+            return httpx.Response(
+                200,
+                json={
+                    "standings": [
+                        {"type": "TOTAL", "group": None, "table": [table_row]},
+                        {"type": "HOME", "group": None, "table": [table_row]},
+                        {"type": "AWAY", "group": None, "table": [table_row]},
+                    ]
+                },
+            )
+        return httpx.Response(404)
+
+    settings = Settings(
+        source="api",
+        provider="football-data",
+        api_key="test-key",
+        db_path=database.path,
+        season="2024/2025",
+        competitions=("PL",),
+    )
+    client = FootballClient(settings, database, threading.Event(), httpx.MockTransport(handler))
+    result = sync_provider(settings, database, SyncRequest(), threading.Event(), client)
+    assert result["state"] == "succeeded"
+    assert any(
+        r.get("resource") == "PL/standings" and r.get("state") == "succeeded" for r in result["resources"]
+    )
+    rows = database.standings_for("PL", "2024/2025")
+    assert len(rows) == 1
+    assert rows[0]["points"] == 23
+
+
 def test_api_static_search_validation_and_source_labels(database: Database) -> None:
     encoder = TestEncoder()
     index_players(database, encoder, threading.Event())

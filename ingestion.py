@@ -454,6 +454,11 @@ def sync_provider(
                         client.get(f"competitions/{code}/standings", {"season": season[:4]}), "standings"
                     )
                     known_ids = {int(t["id"]) for t in teams}
+                    # The provider returns one table object per type (TOTAL,
+                    # HOME, AWAY) for every group/stage. Only TOTAL rows are
+                    # a competition table; HOME/AWAY are splits of the same
+                    # standings and would collide on (league, season,
+                    # team_id) if included here.
                     standing_rows = [
                         Standing(
                             team_id=int(entry["team"]["id"]),
@@ -472,6 +477,7 @@ def sync_provider(
                             form=entry.get("form"),
                         )
                         for table in tables
+                        if table.get("type", "TOTAL") == "TOTAL"
                         for entry in table.get("table", [])
                         if int(entry["team"]["id"]) in known_ids
                     ]
