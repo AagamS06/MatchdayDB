@@ -1,0 +1,104 @@
+name: Build and release desktop app
+
+# Builds the standalone MatchdayDB desktop app (see packaging/BUILD.md) on
+# Windows, macOS, and Linux, then attaches a zip of each to a GitHub
+# Release -- so getting it is "download the zip from Releases", nothing
+# else.
+#
+# Runs on:
+#   - pushing a tag like v1.0.0 -> builds all three, publishes a Release
+#   - manual trigger (Actions tab -> Run workflow) -> builds all three as
+#     downloadable artifacts, no Release published (handy for test builds)
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset_name: MatchdayDB-windows
+          - os: macos-latest
+            asset_name: MatchdayDB-macos
+          - os: ubuntu-latest
+            asset_name: MatchdayDB-linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-dev.txt
+
+      - name: Build with PyInstaller
+        run: pyinstaller packaging/matchdaydb.spec --distpath dist --workpath build --noconfirm
+
+      - name: Zip the build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/MatchdayDB -DestinationPath ${{ matrix.asset_name }}.zip
+
+      - name: Zip the build (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          cd dist
+          zip -r "../${{ matrix.asset_name }}.zip" MatchdayDB
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: ${{ matrix.asset_name }}.zip
+          retention-days: 30
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect zips
+        run: |
+          mkdir -p release-assets
+          find artifacts -name "*.zip" -exec cp {} release-assets/ \;
+          ls -la release-assets
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-assets/*.zip
+          generate_release_notes: true
+          body: |
+            Standalone desktop builds -- download the zip for your OS, unzip
+            it, and run the `MatchdayDB` file at the top of the folder.
+            No Python, no terminal, no install step.
+
+            - **Windows:** unzip, then double-click `MatchdayDB.exe`. If
+              SmartScreen warns you, click **More info -> Run anyway**
+              (expected for an unsigned build -- see `packaging/BUILD.md`).
+            - **macOS:** unzip, then right-click (or Control-click)
+              `MatchdayDB` -> **Open** -> **Open** again when it asks.
+              A plain double-click will be blocked by Gatekeeper the first
+              time (same reason as above).
+            - **Linux:** unzip, then run `./MatchdayDB` from that folder.
+
+            The first launch needs one internet connection to download the
+            ~90MB similarity-search model; after that it's cached locally.
+            You'll be asked for your football-data.org API key the first
+            time the dashboard opens.
