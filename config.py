@@ -28,6 +28,13 @@ LEAGUES = {
     "EC": "European Championship",
 }
 
+# Competitions whose squads are drawn from clubs that already belong to one of
+# the domestic leagues above (or to a league outside our free-tier coverage).
+# Teams here are synced last and only to pick up clubs not already covered by
+# a domestic league sync in the same run — never to re-fetch or relabel a
+# squad a domestic league already supplied.
+CONTINENTAL_COMPETITIONS = frozenset({"CL", "WC", "EC"})
+
 
 def current_season() -> str:
     today = datetime.now(UTC).date()

@@ -15,7 +15,7 @@ from collections.abc import Callable
 import httpx
 from pydantic import ValidationError
 
-from config import Settings
+from config import CONTINENTAL_COMPETITIONS, Settings
 from database import Database
 from errors import MatchdayError
 from models import Fixture, Player, PlayerStats, SyncRequest, Team, utc_now
@@ -250,7 +250,14 @@ def sync_provider(
     try:
         catalogue = require_list(client.get("competitions"), "competitions")
         available = {str(c.get("code")): c for c in catalogue if c.get("code")}
-        for code in settings.competitions:
+        # Domestic leagues always sync before continental/international
+        # competitions, so a club's squad is settled by its home league
+        # first and competitions like the Champions League only need to
+        # fill in the clubs that aren't already covered.
+        ordered_competitions = sorted(
+            settings.competitions, key=lambda code: code in CONTINENTAL_COMPETITIONS
+        )
+        for code in ordered_competitions:
             season = settings.effective_season
             expected = 0
             failures = 0
@@ -283,9 +290,24 @@ def sync_provider(
                     raise MatchdayError("TEAMS_EMPTY", "No teams returned for the selected season.", 502)
                 expected = len(teams)
                 ids = {int(t["id"]) for t in teams}
+                is_continental = code in CONTINENTAL_COMPETITIONS
                 with database.transaction() as connection:
                     for raw in teams:
-                        database.upsert_team(connection, parse_team(raw, code))
+                        team_id = int(raw["id"])
+                        league = code
+                        if is_continental:
+                            existing = connection.execute(
+                                "SELECT league FROM teams WHERE team_id=?", (team_id,)
+                            ).fetchone()
+                            if (
+                                existing
+                                and existing["league"]
+                                and existing["league"] not in CONTINENTAL_COMPETITIONS
+                            ):
+                                # Keep the club under its domestic league rather
+                                # than relabeling it under this competition.
+                                league = existing["league"]
+                        database.upsert_team(connection, parse_team(raw, league))
                     previous = connection.execute(
                         "SELECT team_id FROM teams WHERE league=?", (code,)
                     ).fetchall()
@@ -303,6 +325,28 @@ def sync_provider(
                         last = connection.execute(
                             "SELECT season,synced_at FROM squad_sync WHERE team_id=?", (team_id,)
                         ).fetchone()
+                        home_league = connection.execute(
+                            "SELECT league FROM teams WHERE team_id=?", (team_id,)
+                        ).fetchone()
+                    if (
+                        is_continental
+                        and last
+                        and home_league
+                        and home_league["league"]
+                        and home_league["league"] not in CONTINENTAL_COMPETITIONS
+                    ):
+                        # This club's squad was already settled by its
+                        # domestic league sync earlier in this run (or a
+                        # previous one) — don't spend a call re-fetching or
+                        # relabeling it here.
+                        resources.append(
+                            {
+                                "resource": f"{code}/squad/{team_id}",
+                                "state": "skipped",
+                                "message": "Squad already covered by the club's domestic league.",
+                            }
+                        )
+                        continue
                     fresh = (
                         last
                         and last["season"] == season
