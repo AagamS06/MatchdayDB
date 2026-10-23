@@ -99,6 +99,9 @@ class Settings:
     model_threads: int = 2
     refresh_hours: int = 24
     requests_per_minute: int = 10
+    nebius_api_key: str = field(default="", repr=False)
+    nebius_model: str = "nvidia/nemotron-3-super-120b-a12b"
+    nebius_base_url: str = "https://api.tokenfactory.nebius.com/v1"
 
     def __post_init__(self) -> None:
         if self.provider != "football-data":
@@ -164,6 +167,9 @@ class Settings:
             model_threads=int(os.getenv("MATCHDAY_MODEL_THREADS", "2")),
             refresh_hours=int(os.getenv("MATCHDAY_REFRESH_HOURS", "24")),
             requests_per_minute=int(os.getenv("MATCHDAY_REQUESTS_PER_MINUTE", "10")),
+            nebius_api_key=os.getenv("NEBIUS_API_KEY", "").strip(),
+            nebius_model=os.getenv("NEBIUS_MODEL", "nvidia/nemotron-3-super-120b-a12b").strip(),
+            nebius_base_url=os.getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1").strip(),
         )
 
 

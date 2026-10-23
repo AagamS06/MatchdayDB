@@ -23,6 +23,7 @@ from filelock import FileLock, Timeout
 from starlette.exceptions import HTTPException
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+import ai_scout
 from config import ROOT, LEAGUES, Settings, load_env_file, remember_key
 from database import Database
 from embeddings import LocalEmbedder, index_players, valid_index
@@ -376,6 +377,28 @@ def create_app(
         cross_role: bool = False,
     ) -> dict[str, Any]:
         return ctx.scout.similar(player_name, filters, top_k, player_id, ranking, cross_role)
+
+    @application.get("/ai/ask")
+    def ai_ask(
+        q: Annotated[str, Query(min_length=3, max_length=500)],
+        filters: Annotated[Filters, Depends(filter_params)],
+        ctx: Annotated[Services, Depends(services)],
+        top_k: Annotated[int, Query(ge=1, le=20)] = 8,
+    ) -> dict[str, Any]:
+        """A Nemotron-reasoned answer (via Nebius Token Factory) grounded in the
+        local search index -- the same real player rows /search already finds."""
+        return ai_scout.ask(ctx.settings, ctx.scout, q, filters, top_k)
+
+    @application.get("/ai/report/{player_name}")
+    def ai_report(
+        player_name: str,
+        filters: Annotated[Filters, Depends(filter_params)],
+        ctx: Annotated[Services, Depends(services)],
+        player_id: Annotated[int | None, Query(gt=0)] = None,
+    ) -> dict[str, Any]:
+        """A short Nemotron-written scouting report on one player and its
+        nearest statistical/style matches from /similar."""
+        return ai_scout.report(ctx.settings, ctx.scout, player_name, filters, player_id)
 
     @application.get("/players")
     def players(

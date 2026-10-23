@@ -172,6 +172,33 @@ $("close-dialog").addEventListener("click", () => $("player-dialog").close());
 // Backdrop clicks target the dialog itself; compare against its box so clicks on its own padding don't close it.
 $("player-dialog").addEventListener("click", (event) => { const dialog = event.currentTarget; if (event.target !== dialog) return; const box = dialog.getBoundingClientRect(); if (event.clientX < box.left || event.clientX > box.right || event.clientY < box.top || event.clientY > box.bottom) dialog.close(); });
 $("dialog-compare").addEventListener("click", () => { const player = state.dialogPlayer; if (!player) return; $("player-dialog").close(); $("twin-search").value = ""; fillTwins(); $("twin-player").value = String(player.player_id); showView("twins"); void loadTwins(); });
+function renderAIAnswer(text, modelId) { $("ai-answer-text").textContent = text; $("ai-answer-model").textContent = modelId ? `Reasoned by ${modelId} via Nebius Token Factory.` : ""; $("ai-answer").classList.remove("hidden"); }
+function renderAIShortlist(title, players) { $("ai-shortlist-title").textContent = title; $("ai-shortlist-title").classList.toggle("hidden", !players.length); if (players.length) $("ai-shortlist").replaceChildren(...players.map(playerCard)); else empty($("ai-shortlist"), "No players to show", "Try a broader question."); }
+async function askAI(question) {
+  if (!$("ai-ask-form").reportValidity()) return;
+  feedback("ai-feedback", "Asking AI Scout…"); $("ai-answer").classList.add("hidden"); $("ai-shortlist").replaceChildren(); $("ai-shortlist-title").classList.add("hidden");
+  try {
+    const result = await api(`/ai/ask?${new URLSearchParams({ q: question })}`);
+    renderAIAnswer(result.answer, result.model);
+    renderAIShortlist(result.shortlist.length ? "Shortlist considered" : "", result.shortlist);
+    feedback("ai-feedback");
+  } catch (error) { feedback("ai-feedback", error.message, true); }
+}
+$("ai-ask-form").addEventListener("submit", (event) => { event.preventDefault(); void askAI($("ai-question").value.trim()); });
+$("dialog-ai-report").addEventListener("click", () => {
+  const player = state.dialogPlayer; if (!player) return;
+  $("player-dialog").close(); showView("ai"); syncURL();
+  $("ai-question").value = `Scouting report: ${player.name}`;
+  void (async () => {
+    feedback("ai-feedback", `Writing a scouting report on ${player.name}…`); $("ai-answer").classList.add("hidden"); $("ai-shortlist").replaceChildren(); $("ai-shortlist-title").classList.add("hidden");
+    try {
+      const result = await api(`/ai/report/${encodeURIComponent(player.name)}?${new URLSearchParams({ player_id: player.player_id })}`);
+      renderAIAnswer(result.report, result.model);
+      renderAIShortlist(result.comparisons.length ? "Closest comparisons" : "", result.comparisons);
+      feedback("ai-feedback");
+    } catch (error) { feedback("ai-feedback", error.message, true); }
+  })();
+});
 $("twin-search").addEventListener("input", fillTwins);
 async function loadTwins() {
   const controller = channel("twins");
