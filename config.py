@@ -102,6 +102,7 @@ class Settings:
     nebius_api_key: str = field(default="", repr=False)
     nebius_model: str = "nvidia/nemotron-3-super-120b-a12b"
     nebius_base_url: str = "https://api.tokenfactory.nebius.com/v1"
+    allowed_hosts: tuple[str, ...] = ("localhost", "127.0.0.1", "[::1]", "testserver")
 
     def __post_init__(self) -> None:
         if self.provider != "football-data":
@@ -124,6 +125,8 @@ class Settings:
             raise ValueError("Model threads must be between 1 and 32.")
         if not self.competitions or any(c not in LEAGUES for c in self.competitions):
             raise ValueError("Choose competition codes PL, PD, BL1, SA, or FL1.")
+        if not self.allowed_hosts:
+            raise ValueError("MATCHDAY_ALLOWED_HOSTS cannot be empty.")
 
     @property
     def effective_season(self) -> str:
@@ -170,6 +173,10 @@ class Settings:
             nebius_api_key=os.getenv("NEBIUS_API_KEY", "").strip(),
             nebius_model=os.getenv("NEBIUS_MODEL", "nvidia/nemotron-3-super-120b-a12b").strip(),
             nebius_base_url=os.getenv("NEBIUS_BASE_URL", "https://api.tokenfactory.nebius.com/v1").strip(),
+            allowed_hosts=(
+                tuple(h.strip() for h in os.getenv("MATCHDAY_ALLOWED_HOSTS", "").split(",") if h.strip())
+                or ("localhost", "127.0.0.1", "[::1]", "testserver")
+            ),
         )
 
 

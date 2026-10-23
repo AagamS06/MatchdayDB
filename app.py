@@ -217,9 +217,7 @@ def create_app(
     )
     application.state.database, application.state.engine = current.database, engine
     application.state.manager = current.manager
-    application.add_middleware(
-        TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"]
-    )
+    application.add_middleware(TrustedHostMiddleware, allowed_hosts=list(settings.allowed_hosts))
 
     @application.middleware("http")
     async def boundary(request: Request, call_next: Any) -> Response:

@@ -180,6 +180,7 @@ Settings come from the environment. `.env.example` documents them; it is not loa
 | `MATCHDAY_DB_PATH` | Provider-specific file in `var/` | Custom database; provider identity is enforced |
 | `MATCHDAY_MODEL_CACHE` | `.cache/models/` | Local model assets |
 | `MATCHDAY_MODEL_THREADS` | `2` | CPU threads, 1–32 |
+| `MATCHDAY_ALLOWED_HOSTS` | `localhost,127.0.0.1,[::1],testserver` | Comma-separated hostnames the app accepts requests for. Only needs changing for a reverse-proxied public deployment (see `packaging/DEPLOY_NEBIUS.md`) — local/desktop use is unaffected. |
 
 **Refresh data** forces a squad/stat refresh; cached pages from an incomplete run remain reusable. Polling checks fixtures while respecting the normal catalogue refresh interval. “Current” means the provider's latest available state, not a guaranteed instant push feed.
 
@@ -244,7 +245,7 @@ MatchdayDB's AI Scout feature was built for the [Nebius x NVIDIA Global AI Hacka
 - **NVIDIA model used:** `nvidia/nemotron-3-super-120b-a12b` (configurable via `NEBIUS_MODEL`), called through **Nebius Token Factory**'s OpenAI-compatible API.
 - **Where Token Factory helped:** it's the only moving part AI Scout needed to add — a single `/chat/completions` call, no separate hosting, GPU, or model-serving setup of our own, on top of infrastructure (the local embedding search) that already existed.
 - **How it's used:** retrieval-augmented, not a bare chatbot. `scout.py`'s existing local MiniLM search finds the real player shortlist first (see `ai_scout.py`); Nemotron only ever reasons over that shortlist, with an explicit instruction not to discuss anything outside it — so the feature can't hallucinate a player, club, or transfer value that isn't actually in the connected dataset.
-- **Other Nebius tools:** none beyond Token Factory for this submission; the app itself can also be deployed on Nebius AI Cloud (see `packaging/BUILD.md`).
+- **Other Nebius tools:** the public demo itself runs on a Nebius AI Cloud virtual machine — see [`packaging/DEPLOY_NEBIUS.md`](packaging/DEPLOY_NEBIUS.md).
 
 MatchdayDB predates this hackathon's submission period as a general scouting dashboard; AI Scout (`nebius.py`, `ai_scout.py`, the `/ai/ask` and `/ai/report` endpoints, and the AI Scout tab) is the significant update made during it.
 

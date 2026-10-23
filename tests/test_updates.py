@@ -53,6 +53,10 @@ def test_configuration_tracks_season_and_all_leagues(monkeypatch: pytest.MonkeyP
         Settings(season="2025/2028")
     with pytest.raises(ValueError):
         Settings(provider="api-football")
+    monkeypatch.delenv("MATCHDAY_ALLOWED_HOSTS", raising=False)
+    assert Settings.from_env().allowed_hosts == ("localhost", "127.0.0.1", "[::1]", "testserver")
+    monkeypatch.setenv("MATCHDAY_ALLOWED_HOSTS", " demo.example , localhost ")
+    assert Settings.from_env().allowed_hosts == ("demo.example", "localhost")
 
 
 def test_existing_v1_database_migrates_without_losing_players(tmp_path: Path) -> None:

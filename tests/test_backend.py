@@ -363,3 +363,24 @@ def test_api_static_search_validation_and_source_labels(database: Database) -> N
         )
         assert client.post("/sync", content="{}").status_code == 415
         assert client.get("/health", headers={"Host": "untrusted.example"}).status_code == 400
+
+
+def test_allowed_hosts_is_configurable_for_public_deployment(tmp_path: Path) -> None:
+    """MATCHDAY_ALLOWED_HOSTS lets a public deployment (e.g. behind a reverse proxy
+    on Nebius AI Cloud) accept its real hostname, while an unset/default config
+    keeps the original loopback-only behavior unchanged for local/desktop use."""
+    db = Database(tmp_path / "demo.sqlite3", "demo", "2024/2025")
+    db.initialize()
+    public_settings = Settings(db_path=db.path, allowed_hosts=("demo.example", "localhost", "127.0.0.1"))
+    with TestClient(create_app(public_settings, bootstrap=False, embedder=TestEncoder())) as client:
+        assert client.get("/health", headers={"Host": "demo.example"}).status_code == 200
+        assert client.get("/health", headers={"Host": "localhost"}).status_code == 200
+        assert client.get("/health", headers={"Host": "evil.example"}).status_code == 400
+
+    default_settings = Settings(db_path=db.path)
+    with TestClient(create_app(default_settings, bootstrap=False, embedder=TestEncoder())) as client:
+        assert client.get("/health", headers={"Host": "localhost"}).status_code == 200
+        assert client.get("/health", headers={"Host": "demo.example"}).status_code == 400
+
+    with pytest.raises(ValueError, match="ALLOWED_HOSTS"):
+        Settings(db_path=db.path, allowed_hosts=())
