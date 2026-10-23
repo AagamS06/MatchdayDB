@@ -10,6 +10,7 @@ Browse players by name, team and league. Compare playing styles, inspect provide
 - Player-name search, accent-insensitive matching, team search, league selection, position, nationality and maximum-age filters.
 - Sorting by name, age, position, rating, team, goals, assists, minutes and update time. Unknown values always appear last.
 - Natural-language scouting and a searchable Player Twin picker with five ranked matches.
+- **AI Scout**: ask a scouting question in plain English, or generate a short scouting report on any player, reasoned by an NVIDIA Nemotron model served through Nebius Token Factory and grounded only in the real players your local search already found.
 - A team scout that reports supported depth, succession and statistical concerns, explains its evidence, and suggests players from other clubs.
 - football-data.org as the live-data provider, with an offline synthetic demo always available as a fallback.
 - Current-season discovery and all available player pages across the Premier League, La Liga, Bundesliga, Serie A and Ligue 1.
@@ -138,6 +139,29 @@ Use **Player name** for a literal name search. Use the team field to search a cl
 
 These are planning indicators. They do not infer injuries, formation, contracts, wages, availability for transfer or causation from statistics.
 
+## AI Scout (Nebius Token Factory + NVIDIA Nemotron)
+
+AI Scout is a retrieval-augmented feature: MatchdayDB's own local embedding search (the same index behind **Playing style** search and **Player twins**) finds a real shortlist of players from your synced database first, and only that shortlist is handed to an NVIDIA Nemotron model for the actual natural-language reasoning. The model is instructed to discuss only the players it was given — it has no way to invent a player, club or statistic that isn't already in your database.
+
+1. Create an account and an API key at [Nebius Token Factory](https://tokenfactory.nebius.com).
+2. Set the key before starting the app:
+
+   ```bash
+   export NEBIUS_API_KEY=your-token-factory-key
+   python app.py
+   ```
+
+   (On Windows PowerShell: `$env:NEBIUS_API_KEY = "your-token-factory-key"`.)
+3. Open the **AI Scout** tab, or click **AI scouting report** on any player's profile.
+
+Without a key, every other part of MatchdayDB works exactly as before — AI Scout simply returns a clear "needs a Nebius Token Factory API key" error instead of failing silently or falling back to a different model.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NEBIUS_API_KEY` | Absent | Nebius Token Factory credential. Required for AI Scout; everything else works without it. |
+| `NEBIUS_MODEL` | `nvidia/nemotron-3-super-120b-a12b` | The NVIDIA Nemotron model id to call |
+| `NEBIUS_BASE_URL` | `https://api.tokenfactory.nebius.com/v1` | Token Factory's OpenAI-compatible endpoint |
+
 ## Configuration
 
 Settings come from the environment. `.env.example` documents them; it is not loaded automatically.
@@ -185,6 +209,8 @@ The supplied `MatchdayDB.patch` is a complete-source patch against the original 
 | `GET /players?league=PL&limit=12&offset=12` | Catalogue pagination |
 | `GET /search?q=press-resistant%20midfielder&top_k=5` | Semantic search with scalar filters |
 | `GET /similar/Rodri?top_k=5` | Player twins |
+| `GET /ai/ask?q=a%20creative%20attacking%20midfielder` | AI Scout: a Nemotron-reasoned answer grounded in the real search shortlist |
+| `GET /ai/report/Bukayo%20Saka` | AI Scout: a short Nemotron-written report on one player vs. its nearest matches |
 | `GET /teams/1/needs?max_age=25` | Team audit; use an ID from `/options` |
 | `GET /options` | Loaded players, teams, leagues and filter options |
 | `GET /health` | Coverage, provenance, timestamps and latest job |
@@ -210,6 +236,17 @@ Provider tests use deterministic HTTP responses to validate pagination, current 
 ## Project documents
 
 [PRD.md](PRD.md) · [Architecture.md](Architecture.md) · [Rules.md](Rules.md) · [Phases.md](Phases.md) · [Design.md](Design.md) · [Memory.md](Memory.md)
+
+## Nebius x NVIDIA Global AI Hackathon
+
+MatchdayDB's AI Scout feature was built for the [Nebius x NVIDIA Global AI Hackathon](https://nebiusglobalaihackathon.devpost.com/), **Best Apps and Agents** track.
+
+- **NVIDIA model used:** `nvidia/nemotron-3-super-120b-a12b` (configurable via `NEBIUS_MODEL`), called through **Nebius Token Factory**'s OpenAI-compatible API.
+- **Where Token Factory helped:** it's the only moving part AI Scout needed to add — a single `/chat/completions` call, no separate hosting, GPU, or model-serving setup of our own, on top of infrastructure (the local embedding search) that already existed.
+- **How it's used:** retrieval-augmented, not a bare chatbot. `scout.py`'s existing local MiniLM search finds the real player shortlist first (see `ai_scout.py`); Nemotron only ever reasons over that shortlist, with an explicit instruction not to discuss anything outside it — so the feature can't hallucinate a player, club, or transfer value that isn't actually in the connected dataset.
+- **Other Nebius tools:** none beyond Token Factory for this submission; the app itself can also be deployed on Nebius AI Cloud (see `packaging/BUILD.md`).
+
+MatchdayDB predates this hackathon's submission period as a general scouting dashboard; AI Scout (`nebius.py`, `ai_scout.py`, the `/ai/ask` and `/ai/report` endpoints, and the AI Scout tab) is the significant update made during it.
 
 ## Ownership and sources
 
