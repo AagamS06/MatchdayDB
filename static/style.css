@@ -37,4 +37,7 @@ body{background-color:var(--bg);background-image:url("data:image/svg+xml,%3Csvg 
 .notice-dismiss:hover{color:var(--text);background:var(--raised)}
 .ai-answer{white-space:pre-line;line-height:1.5}
 .ai-answer p{margin:0 0 8px}
+#ai-ask-form .search-row{grid-template-columns:10fr 1fr}
+#ai-ask-form .query-label{grid-column:auto;grid-row:auto}
+#ai-ask-form .button{min-width:0}
 .ai-shortlist-title{font-size:14px;color:var(--muted);margin:18px 0 10px}
